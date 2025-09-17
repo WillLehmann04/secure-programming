@@ -8,8 +8,8 @@ from .json_format import stabilise_json
 
 __all__ = [
     "base64url_encode", "base64url_decode",
-    "canonicalise_json",
-    "RSAPublicKey", "RSAPrivateKey", "rsa_generate_keypair",
+    "stabilise_json",
+    "RSAPublicKey", "RSAPrivateKey", "generate_rsa_keypair",
     "rsa_encrypt_oaep", "rsa_decrypt_oaep", "rsa_oaep_max_plaintext_len",
     "rsa_encrypt_large", "rsa_decrypt_large",
     "rsa_sign_pss", "rsa_verify_pss",

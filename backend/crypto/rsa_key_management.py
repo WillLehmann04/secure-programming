@@ -2,8 +2,11 @@
     Created: 17/09/2025 @ 2:40pm
     RSA Key functionality
 
-    Tested: as of 17/09/2025 @ pm
-        - Verified round-trip encode→decode for b"", b"A", b"OK", b"hi", b"hello world", and b"\x00\xff\x10"
+    Tested: as of 17/09/2025 @ 4:13pm
+        - Generated and loaded a round trip
+        - Correct PEM headers
+        - Encrypted a private key
+        - Unencrypted a private key.
 '''
 
 # ========== Imports ========== 

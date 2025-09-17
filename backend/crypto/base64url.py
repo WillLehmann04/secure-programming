@@ -1,8 +1,17 @@
 '''
     Created: 17/09/2025 @ 1:37pm
     BASE64URL functionality
+
+    Tested: as of 17/09/2025 @ 1:53pm
+        - Verified round-trip encode→decode for b"", b"A", b"OK", b"hi", b"hello world", and b"\x00\xff\x10"
+        - Verified no padding was encoded
+        - Verified padding was added back correctly after decoding
+        - Tested edge cases with one or more padding chars
+        - Confirmed empty input encodes and decodes correctly
+        - Testing bad strings raise errors.
 '''
 
+# ========== Imports ========== 
 import base64
 
 # ========== Base64 URL Encoding ========== 

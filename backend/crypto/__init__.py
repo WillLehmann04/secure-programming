@@ -1,5 +1,5 @@
 from .base64url import base64url_encode, base64url_decode
-#from .canonical_json import canonicalize_json
+from .json_format import stabilise_json
 #from .rsa_key_management import RSAPublicKey, RSAPrivateKey, rsa_generate_keypair
 #from .rsa_oaep import rsa_encrypt_oaep, rsa_decrypt_oaep, rsa_oaep_max_plaintext_len, \
 #                      rsa_encrypt_large, rsa_decrypt_large
@@ -8,7 +8,7 @@ from .base64url import base64url_encode, base64url_decode
 
 __all__ = [
     "base64url_encode", "base64url_decode",
-    "canonicalize_json",
+    "canonicalise_json",
     "RSAPublicKey", "RSAPrivateKey", "rsa_generate_keypair",
     "rsa_encrypt_oaep", "rsa_decrypt_oaep", "rsa_oaep_max_plaintext_len",
     "rsa_encrypt_large", "rsa_decrypt_large",

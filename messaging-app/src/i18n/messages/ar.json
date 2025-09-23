@@ -1,0 +1,113 @@
+{
+  "common": {
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "retry": "إعادة المحاولة",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "reply": "رد",
+    "copy": "نسخ",
+    "search": "بحث",
+    "send": "إرسال",
+    "attach": "إرفاق ملف",
+    "emoji": "إضافة إيموجي",
+    "settings": "الإعدادات",
+    "close": "إغلاق",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق"
+  },
+  "auth": {
+    "signIn": "تسجيل الدخول إلى حسابك",
+    "signUp": "إنشاء حسابك",
+    "email": "عنوان البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "signInButton": "تسجيل الدخول",
+    "signUpButton": "إنشاء حساب",
+    "magicLink": "إرسال رابط سحري",
+    "checkEmail": "تحقق من بريدك الإلكتروني",
+    "magicLinkSent": "لقد أرسلنا لك رابطاً سحرياً لتسجيل الدخول.",
+    "demoCredentials": "بيانات تجريبية: alice@example.com / password"
+  },
+  "navigation": {
+    "messages": "الرسائل",
+    "conversations": "المحادثات",
+    "newMessage": "رسالة جديدة",
+    "newGroup": "مجموعة جديدة",
+    "quickActions": "الإجراءات السريعة",
+    "pinned": "المثبتة",
+    "allConversations": "جميع المحادثات",
+    "searchConversations": "البحث في المحادثات...",
+    "commandPalette": "لوحة الأوامر (⌘K)"
+  },
+  "chat": {
+    "typeMessage": "اكتب رسالة...",
+    "noMessages": "لا توجد رسائل بعد",
+    "startConversation": "ابدأ المحادثة!",
+    "selectConversation": "اختر محادثة لبدء الدردشة",
+    "welcomeMessage": "مرحباً بك في رسائلك",
+    "messageStatus": {
+      "sending": "جاري الإرسال...",
+      "sent": "تم الإرسال",
+      "delivered": "تم التسليم",
+      "read": "تم القراءة",
+      "failed": "فشل الإرسال"
+    },
+    "sendBehavior": {
+      "enter": "اضغط Enter للإرسال، Shift+Enter لسطر جديد",
+      "shiftEnter": "اضغط Shift+Enter للإرسال، Enter لسطر جديد"
+    },
+    "slashCommands": {
+      "title": "أوامر الشرطة المائلة:",
+      "giphy": "/giphy - البحث عن صورة متحركة",
+      "shrug": "/shrug - ¯\\_(ツ)_/¯"
+    },
+    "actions": {
+      "react": "تفاعل",
+      "pin": "تثبيت",
+      "star": "نجمة",
+      "forward": "إعادة توجيه",
+      "edit": "تعديل الرسالة",
+      "delete": "حذف الرسالة",
+      "reply": "الرد على الرسالة",
+      "copy": "نسخ الرسالة",
+      "retry": "إعادة المحاولة"
+    }
+  },
+  "search": {
+    "placeholder": "البحث في المحادثات والمستخدمين والأوامر...",
+    "noResults": "لم يتم العثور على نتائج",
+    "startTyping": "ابدأ الكتابة للبحث...",
+    "navigate": "↑↓ التنقل",
+    "select": "↵ تحديد",
+    "close": "⎋ إغلاق",
+    "open": "⌘K للفتح"
+  },
+  "notifications": {
+    "newMessage": "رسالة جديدة",
+    "mention": "تم ذكرك",
+    "reaction": "تفاعل شخص مع رسالتك",
+    "typing": "شخص ما يكتب..."
+  },
+  "settings": {
+    "profile": "الملف الشخصي",
+    "preferences": "التفضيلات",
+    "privacy": "الخصوصية",
+    "notifications": "الإشعارات",
+    "theme": "المظهر",
+    "fontSize": "حجم الخط",
+    "language": "اللغة",
+    "reducedMotion": "حركة مخفضة",
+    "readReceipts": "إيصالات القراءة",
+    "lastSeen": "آخر ظهور"
+  },
+  "errors": {
+    "failedToLoad": "فشل في التحميل",
+    "tryAgainLater": "يرجى المحاولة لاحقاً",
+    "networkError": "خطأ في الشبكة",
+    "unauthorized": "غير مصرح",
+    "notFound": "غير موجود"
+  }
+}

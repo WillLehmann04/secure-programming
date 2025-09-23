@@ -1,0 +1,113 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "reply": "Reply",
+    "copy": "Copy",
+    "search": "Search",
+    "send": "Send",
+    "attach": "Attach file",
+    "emoji": "Add emoji",
+    "settings": "Settings",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous"
+  },
+  "auth": {
+    "signIn": "Sign in to your account",
+    "signUp": "Create your account",
+    "email": "Email address",
+    "password": "Password",
+    "signInButton": "Sign in",
+    "signUpButton": "Sign up",
+    "magicLink": "Send magic link",
+    "checkEmail": "Check your email",
+    "magicLinkSent": "We've sent you a magic link to sign in.",
+    "demoCredentials": "Demo credentials: alice@example.com / password"
+  },
+  "navigation": {
+    "messages": "Messages",
+    "conversations": "Conversations",
+    "newMessage": "New Message",
+    "newGroup": "New Group",
+    "quickActions": "Quick Actions",
+    "pinned": "Pinned",
+    "allConversations": "All Conversations",
+    "searchConversations": "Search conversations...",
+    "commandPalette": "Command Palette (⌘K)"
+  },
+  "chat": {
+    "typeMessage": "Type a message...",
+    "noMessages": "No messages yet",
+    "startConversation": "Start the conversation!",
+    "selectConversation": "Select a conversation to start chatting",
+    "welcomeMessage": "Welcome to your messages",
+    "messageStatus": {
+      "sending": "Sending...",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Failed"
+    },
+    "sendBehavior": {
+      "enter": "Press Enter to send, Shift+Enter for new line",
+      "shiftEnter": "Press Shift+Enter to send, Enter for new line"
+    },
+    "slashCommands": {
+      "title": "Slash commands:",
+      "giphy": "/giphy - Search for a GIF",
+      "shrug": "/shrug - ¯\\_(ツ)_/¯"
+    },
+    "actions": {
+      "react": "React",
+      "pin": "Pin",
+      "star": "Star",
+      "forward": "Forward",
+      "edit": "Edit message",
+      "delete": "Delete message",
+      "reply": "Reply to message",
+      "copy": "Copy message",
+      "retry": "Retry sending"
+    }
+  },
+  "search": {
+    "placeholder": "Search conversations, users, or commands...",
+    "noResults": "No results found",
+    "startTyping": "Start typing to search...",
+    "navigate": "↑↓ Navigate",
+    "select": "↵ Select",
+    "close": "⎋ Close",
+    "open": "⌘K to open"
+  },
+  "notifications": {
+    "newMessage": "New message",
+    "mention": "You were mentioned",
+    "reaction": "Someone reacted to your message",
+    "typing": "Someone is typing..."
+  },
+  "settings": {
+    "profile": "Profile",
+    "preferences": "Preferences",
+    "privacy": "Privacy",
+    "notifications": "Notifications",
+    "theme": "Theme",
+    "fontSize": "Font Size",
+    "language": "Language",
+    "reducedMotion": "Reduced Motion",
+    "readReceipts": "Read Receipts",
+    "lastSeen": "Last Seen"
+  },
+  "errors": {
+    "failedToLoad": "Failed to load",
+    "tryAgainLater": "Please try again later",
+    "networkError": "Network error",
+    "unauthorized": "Unauthorized",
+    "notFound": "Not found"
+  }
+}

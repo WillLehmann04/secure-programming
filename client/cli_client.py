@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""
-CLI client for SOCP v1.3 minimal commands:
-  /list
-  /tell <user> <text>
-  /all <text>
-  /file <user|public> <path>
-
-Assumptions:
-- server WS URL: ws://localhost:8765 (change as needed)
-- client has an encrypted private-key blob (privkey_store) stored out-of-band.
-- register/login/PAKE handled elsewhere; here we load privkey (decrypted) and pubkey + user_id.
-"""
-
 import asyncio
 import json
 import os
@@ -21,11 +7,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import Tuple, List
-
 import websockets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # for public-channel symmetric
 
-# ---- Project crypto helpers ----
 from backend.crypto import (
     rsa_encrypt_oaep,
     rsa_decrypt_oaep,
@@ -35,20 +19,23 @@ from backend.crypto import (
     stabilise_json,
 )
 
-# (Not used here directly, but available if you need objects)
-# from backend.crypto import load_private_key, load_public_key
+"""
+Return (user_id, privkey_pem_bytes, pubkey_pem_str)
+cfg of the JSON: { "user_id": "...", "privkey_pem_b64": "...", "pubkey_pem": "..." }
+"""
 
-# ---- Configuration ----
+
+#config
 WS_URL = os.environ.get("SOCP_WS", "ws://localhost:8765")
 OAEP_HASH_BYTES = 32  # SHA-256
 RSA_4096_KEY_BYTES = 4096 // 8  # 512
 OAEP_MAX_PLAINTEXT = RSA_4096_KEY_BYTES - 2 * OAEP_HASH_BYTES - 2  # 446 bytes
 
-# ---- Client-side state ----
-_pending: dict[str, asyncio.Future] = {}   # req_id -> Future
-_group_key_cache: dict[str, bytes] = {}    # user_id -> clear group key (RAM only)
+#client side state
+_pending: dict[str, asyncio.Future] = {}   # req_id
+_group_key_cache: dict[str, bytes] = {}    # user_id
 
-# ---- Small utils ----
+# small utils
 def now_ts() -> str:
     return str(int(time.time()))
 
@@ -75,17 +62,17 @@ def content_sig_public(ciphertext_bytes: bytes, frm: str, ts: str, privkey_pem: 
     d = sha256_bytes(ciphertext_bytes + frm.encode() + ts.encode())
     return b64u(rsa_sign_pss(privkey_pem, d))
 
-# ---- AES-GCM for public channel ----
+# AES-GCM for public channel
 def aesgcm_encrypt(key: bytes, plaintext: bytes, aad: bytes = b"") -> tuple[bytes, bytes]:
     nonce = os.urandom(12)
     ct = AESGCM(key).encrypt(nonce, plaintext, aad)
     return nonce, ct
 
-# ---- Key management (demo loader; replace with your PAKE/local decrypt) ----
+# Key management - replace with our actual decrypt
 def load_client_keys_from_config(cfg_path: str) -> Tuple[str, bytes, str]:
     """
     Return (user_id, privkey_pem_bytes, pubkey_pem_str)
-    cfg JSON: { "user_id": "...", "privkey_pem_b64": "...", "pubkey_pem": "..." }
+    cfg of the JSON: { "user_id": "...", "privkey_pem_b64": "...", "pubkey_pem": "..." }
     """
     cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
     user_id = cfg["user_id"]
@@ -93,7 +80,7 @@ def load_client_keys_from_config(cfg_path: str) -> Tuple[str, bytes, str]:
     pub_pem = cfg["pubkey_pem"]
     return user_id, priv_pem, pub_pem
 
-# ---- Envelope builders ----
+# Envelope builders
 def build_user_hello(user_id: str, pubkey_pem: str) -> dict:
     return {"type": "USER_HELLO", "payload": {"user_id": user_id, "pubkey": pubkey_pem}, "ts": now_ts()}
 
@@ -114,7 +101,7 @@ def build_file_chunk(index: int, chunk_b64u: str, frm: str, to: str | None, ts: 
 def build_file_end(manifest_summary: dict, frm: str, to: str | None, ts: str) -> dict:
     return {"type": "FILE_END", "payload": {"summary": manifest_summary, "from": frm, "to": to, "ts": ts}}
 
-# ---- Client RPC plumbing ----
+# Cleient RPC Pumping
 async def listener(ws):
     async for msg in ws:
         try:
@@ -128,7 +115,7 @@ async def listener(ws):
             _pending.pop(rid).set_result(obj)
             continue
 
-        # unsolicited frames (presence updates, etc.)
+        # unsolicited frames
         print("[IN ]", json.dumps(obj, indent=2))
 
 async def rpc(ws, typ: str, payload: dict, timeout: float = 5.0) -> dict:
@@ -141,7 +128,7 @@ async def rpc(ws, typ: str, payload: dict, timeout: float = 5.0) -> dict:
     finally:
         _pending.pop(rid, None)
 
-# ---- Directory lookups ----
+# Dir lookups
 async def get_recipient_pubpem(ws, user_id: str) -> bytes:
     resp = await rpc(ws, "DIR_GET_PUBKEY", {"user_id": user_id})
     if resp.get("type") == "ERROR":
@@ -159,7 +146,7 @@ async def get_public_group_key_for_client(ws, me: str, privkey_pem: bytes) -> by
     _group_key_cache[me] = clear  # 32-byte key; RAM only
     return clear
 
-# ---- High-level commands ----
+# high level commands
 async def cmd_list(ws, user_id: str):
     await ws.send(json.dumps({"type": "CMD_LIST", "payload": {"from": user_id}, "ts": now_ts()}))
 
@@ -247,7 +234,7 @@ async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_by
     await ws.send(json.dumps(end_env))
     print("file transfer finished (sent)")
 
-# ---- Main loop ----
+# MAIN LOOP
 async def main_loop(cfg_path: str):
     user_id, privkey_pem, pubkey_pem = load_client_keys_from_config(cfg_path)
     async with websockets.connect(WS_URL) as ws:

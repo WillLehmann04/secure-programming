@@ -1,11 +1,10 @@
-# persistence/dir_json.py
 from __future__ import annotations
 import json, os, fcntl
 from pathlib import Path
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 
-# ---- JSON "DB" primitives (atomic write + single process lock) ----
+# JSON "DB"
 
 BASE = Path("storage")
 BASE.mkdir(exist_ok=True)
@@ -44,12 +43,12 @@ class _JsonFile:
             fcntl.flock(lf, fcntl.LOCK_UN)
         return data
 
-# Files: users, groups, memberships
+# Files for users groups and memberships
 _users  = _JsonFile("users.json")
 _groups = _JsonFile("groups.json")
 _members = _JsonFile("group_members.json")
 
-# ---- Bootstrap & queries ----
+# Bootdstrap + queries
 
 def ensure_public_group() -> None:
     def mut(d):
@@ -70,7 +69,7 @@ def list_group_members(group_id: str = "public") -> List[str]:
     m = _members.read()
     return sorted((m.get(group_id) or {}).keys())
 
-# ---- Users (directory) ----
+# Users (Dir)
 
 def register_user(user_id: str, pubkey: str, privkey_store: str,
                   pake_verifier: str, meta: Optional[dict] = None) -> None:
@@ -82,7 +81,7 @@ def register_user(user_id: str, pubkey: str, privkey_store: str,
         d[user_id] = {
             "pubkey": pubkey,
             "privkey_store": privkey_store,   # encrypted blob (base64url)
-            "pake_password": pake_verifier,   # PAKE verifier string
+            "pake_password": pake_verifier,
             "meta": meta or {},
             "version": 1,
         }
@@ -97,8 +96,6 @@ def user_exists(user_id: str) -> bool:
 def get_user_meta(user_id: str) -> Optional[dict]:
     row = _users.read().get(user_id)
     return row.get("meta") if row else None
-
-# ---- Membership & wrapped keys ----
 
 def add_member(group_id: str, user_id: str, role: str, wrapped_key_b64u: str) -> None:
     if not wrapped_key_b64u:
@@ -150,7 +147,7 @@ def bump_public_version_and_rewrap(new_wrapped_keys: Dict[str, str]) -> None:
     _groups.update(mut_groups)
     _members.update(mut_members)
 
-# ---- Simple smoke test helper (optional) ----
+# Smoke Test Helper Function (We can Remove)
 if __name__ == "__main__":
     ensure_public_group()
     assert public_group_version() >= 1

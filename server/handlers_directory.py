@@ -1,4 +1,3 @@
-# server/handlers_directory.py
 from __future__ import annotations
 from typing import Dict, Any
 from protocol.rpc import resp_dir_pubkey, resp_dir_wrapped_public_key, resp_error

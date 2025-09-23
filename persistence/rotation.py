@@ -1,8 +1,6 @@
 from __future__ import annotations
 import os
 from typing import Dict, Iterable, Tuple
-
-# your crypto re-exports
 from backend.crypto import rsa_encrypt_oaep, base64url_encode
 
 from persistence.dir_json import (
@@ -20,7 +18,7 @@ def _wrap_for_members(members: Iterable[str], clear_group_key: bytes) -> Dict[st
     for uid in members:
         pub = get_pubkey(uid)
         if not pub:
-            # Skip users without a directory pubkey
+            # Skip any users without a directory pubkey
             continue
         wrapped = rsa_encrypt_oaep(pub.encode("utf-8") if isinstance(pub, str) else pub, clear_group_key)
         out[uid] = base64url_encode(wrapped)

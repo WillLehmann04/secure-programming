@@ -1,4 +1,3 @@
-# server/ws_server.py
 from __future__ import annotations
 import asyncio, json, hashlib
 from typing import Dict, Any, Callable, Optional
@@ -20,7 +19,7 @@ from server.handlers_directory import (
     handle_dir_get_wrapped_public_key,
 )
 
-# --- Minimal crypto verify helpers (server never decrypts content) ---
+# Crypto helpers
 from backend.crypto import rsa_verify_pss, stabilise_json, base64url_decode
 
 SESSIONS: Dict[str, WebSocketServerProtocol] = {}   # user_id -> websocket
@@ -67,7 +66,6 @@ def _verify_content_sig(frame_type: str, payload: Dict[str, Any], sender_id: str
         to = payload.get("to", "")
         digest = _sha256(ct + frm.encode() + to.encode() + ts.encode())
     elif frame_type == "MSG_PUBLIC_CHANNEL":
-        # (nonce is sent too, but spec/content_sig covers ciphertext only)
         digest = _sha256(ct + frm.encode() + ts.encode())
     else:
         return False
@@ -81,7 +79,7 @@ def _is_public_member(user_id: str) -> bool:
     except Exception:
         return False
 
-# --- Router for RPC (directory endpoints already built in step 2) ---
+# Router for RPC
 from typing import Awaitable
 Handler = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 ROUTES: Dict[str, Handler] = {
@@ -97,7 +95,7 @@ async def _forward_to(user_id: str, obj: Dict[str, Any]) -> bool:
     return False
 
 async def _fanout_public(except_user: str, obj: Dict[str, Any]) -> None:
-    # Deliver only to connected members who are also in the 'public' group
+    # Deliver only to connected members in the 'public' group
     public_members = set(list_group_members("public"))
     for uid, peer in list(SESSIONS.items()):
         if uid != except_user and uid in public_members and peer.open:
@@ -116,7 +114,7 @@ async def _handle_connection(ws: WebSocketServerProtocol):
             req_id = obj.get("req_id", "")
             p = obj.get("payload", {}) or {}
 
-            # ---- Directory RPCs ----
+            # Dir RPCs
             route = ROUTES.get(t)
             if route:
                 try:
@@ -126,14 +124,13 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 await ws.send(json.dumps(resp))
                 continue
 
-            # ---- Chat control & routing ----
             if t == "USER_HELLO":
                 uid = p.get("user_id")
                 if not isinstance(uid, str) or not uid:
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":ERR_USER_NOT_FOUND,"message":"missing user_id"}}))
                     continue
 
-                # Enforce the user exists in the directory, and is not already connected under that name
+                # Enforce the user exists in the directory, also not already connected under that name
                 if not user_exists(uid):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":ERR_USER_NOT_FOUND,"message":uid}}))
                     continue
@@ -167,16 +164,16 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 if not _verify_transport_sig(sender, p, obj.get("transport_sig")) or not _verify_content_sig("MSG_PUBLIC_CHANNEL", p, sender):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":"INVALID_SIG","message":"drop"}}))
                     continue
-                # (Optional) ensure sender is a member of "public"
+                # ensure that sender is a member of "public" channel
                 if not _is_public_member(sender):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":"NOT_IN_PUBLIC_GROUP","message":sender}}))
                     continue
                 await _fanout_public(sender, obj)
                 continue
 
-            # Simple file routing (no extra verification; add as you evolve)
+            # Simple file routing - currently no extra validation
             if t in ("FILE_START","FILE_CHUNK","FILE_END"):
-                to = p.get("to")  # None/absent => public
+                to = p.get("to")
                 sender = p.get("from","")
                 if to:
                     # direct file transfer
@@ -200,7 +197,7 @@ async def _handle_connection(ws: WebSocketServerProtocol):
             SESSIONS.pop(uid, None)
 
 async def main():
-    init_persistence()  # seeds 'public' group, etc.
+    init_persistence()
     async with websockets.serve(_handle_connection, "0.0.0.0", 8765, max_size=2**20):
         print("WS server on :8765")
         await asyncio.Future()

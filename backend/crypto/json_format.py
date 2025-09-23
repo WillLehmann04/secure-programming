@@ -20,5 +20,6 @@ def stabilise_json(obj) -> bytes:
         obj, # Original message / content to be transferred.
         separators=(",", ":"), # Eliminate white space / reduce bytes required.
         sort_keys=True, # so the same payload has identical bytes each time.,
-        ensure_ascii=False 
+        ensure_ascii=False,
+        allow_nan=False
     ).encode("utf-8") # Protocol document says protocol frames need to be utf-8

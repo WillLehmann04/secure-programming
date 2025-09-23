@@ -12,26 +12,22 @@
 # ========== Imports ========== 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey, RSAPrivateKey
 
 # ========== RSA Key Pair Generation ========== 
 def generate_rsa_keypair(bits: int = 4096) -> tuple[bytes, bytes]:
-    #Private Key generation
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=bits) # public exponent as required by the outline document.
-
-    # Export private key
-    private_pem = private_key.private_bytes(
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=bits)
+    enc = serialization.NoEncryption()
+    priv_pem = priv.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
+        encryption_algorithm=enc,
     )
-
-    # Export Public key
-    public_pem = private_key.public_key().public_bytes(
+    pub_pem = priv.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-
-    return private_pem, public_pem
+    return pub_pem, priv_pem
 
 
 # ========== Helper RSA Load Priv and Pub ========== 

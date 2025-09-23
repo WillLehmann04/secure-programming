@@ -1,0 +1,9 @@
+{
+  "alice": {
+    "pubkey": "PEM_OR_JWK",
+    "privkey_store": "ENC_PRIVKEY_B64URL",
+    "pake_password": "PAKE_VERIFIER",
+    "meta": {"display_name": "Alice"},
+    "version": 1
+  }
+}

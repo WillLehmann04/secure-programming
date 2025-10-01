@@ -1,21 +1,45 @@
 # backend/protocol_handlers.py
 import json, hashlib, time
+from backend.crypto.json_format import stabilise_json
+from collections import deque
+
 
 # ---------- utilities ----------
 def make_seen_key(frame: dict) -> str:
-    # hash(ts|from|to|hash(payload)) per §5.3
+    # hash(ts|from|to|hash(canonical(payload))) per §5.3
     ts = str(frame.get("ts", 0))
-    f  = frame.get("from","")
-    t  = frame.get("to","")
-    payload = json.dumps(frame.get("payload",{}), sort_keys=True, separators=(",",":"))
-    h = hashlib.sha256(payload.encode()).hexdigest()
+    f  = frame.get("from", "")
+    t  = frame.get("to", "")
+    # Part-4 canonical JSON (bytes)
+    payload_bytes = stabilise_json(frame.get("payload", {}))
+    h = hashlib.sha256(payload_bytes).hexdigest()
     return f"{ts}|{f}|{t}|{h}"
+
+# Bounded dedupe memory: keep last N seen keys
+DEDUP_MAX = 10_000  # adjust if needed
+
+def remember_seen(ctx, key: str) -> bool:
+    """
+    Returns True if key was already seen.
+    Otherwise records it (bounded) and returns False.
+    Requires ctx.seen_ids: set[str] and ctx.seen_queue: deque[str]
+    """
+    if key in ctx.seen_ids:
+        return True
+    ctx.seen_ids.add(key)
+    ctx.seen_queue.append(key)
+    if len(ctx.seen_queue) > DEDUP_MAX:
+        old = ctx.seen_queue.popleft()
+        ctx.seen_ids.discard(old)
+    return False
+
 
 async def send_error(ws, code: str, detail: str = ""):
     await ws.send(json.dumps({
         "type":"ERROR",
         "payload":{"code":code,"detail":detail}
     }))
+
 
 # ---------- §5 Server <-> Server ----------
 
@@ -78,16 +102,23 @@ async def handle_USER_ADVERTISE(ctx, ws, frame):
     Presence gossip (§5.2). Receivers verify, set mapping, and re-gossip.
     Here we trust transport signature; verify hook can be added.
     """
+    # dedupe to prevent gossip storms
+    key = make_seen_key(frame)
+    if remember_seen(ctx, key):  # or do the inline set() check if you skipped the LRU helper
+        return
+
     user_id = frame.get("payload",{}).get("user_id") or frame.get("from")
     loc     = frame.get("payload",{}).get("location") or frame.get("from_server")
     if not (user_id and loc):
         return
+
     ctx.user_locations[user_id] = loc
 
     # re-gossip to other peers (fan-out)
     for sid, pws in ctx.peers.items():
         if pws != ws:
             await pws.send(json.dumps(frame))
+
 
 async def handle_USER_REMOVE(ctx, ws, frame):
     user_id = frame.get("payload",{}).get("user_id")
@@ -102,10 +133,14 @@ async def handle_PEER_DELIVER(ctx, ws, frame):
     Forwarded delivery (§5.3). Do not decrypt; just route.
     Use seen_ids to suppress duplicates / loops.
     """
-    if not ctx.seen_ids.add(make_seen_key(frame)):
+    key = make_seen_key(frame)
+    if key in ctx.seen_ids:
         return  # duplicate; drop
+    ctx.seen_ids.add(key)
+
     target = frame.get("payload",{}).get("user_id") or frame.get("to")
     await _route_to_user(ctx, ws, frame, target)
+
 
 async def handle_HEARTBEAT(ctx, ws, frame):
     sid = frame.get("from")
@@ -176,40 +211,11 @@ async def handle_FILE_END(ctx, ws, frame):
     target = frame.get("to")
     await _route_to_user(ctx, ws, frame, target)
 
-# ---------- routing core (authoritative §8) ----------
+# ---------- routing core (authoritative §7) ----------
 
 async def _route_to_user(ctx, ws, frame, target: str):
-    if not target:
-        return await send_error(ws, "UNKNOWN_TYPE", "missing target")
-
-    # local delivery -> wrap as USER_DELIVER (transport sig is added upstream)
-    if target in ctx.local_users:
-        deliver = {
-            "type":"USER_DELIVER",
-            "from":ctx.server_id,
-            "to":target,
-            "ts":int(time.time()*1000),
-            "payload": frame.get("payload",{})  # encrypted blob stays opaque
-        }
-        await ctx.local_users[target].send(json.dumps(deliver))
-        return
-
-    # remote delivery via known hosting server
-    host_loc = ctx.user_locations.get(target)
-    if host_loc and host_loc != "local" and host_loc in ctx.peers:
-        peer_ws = ctx.peers[host_loc]
-        forward = {
-            "type":"PEER_DELIVER",
-            "from":ctx.server_id,
-            "to":host_loc,
-            "ts":int(time.time()*1000),
-            "payload": {**frame.get("payload",{}), "user_id":target}
-        }
-        await peer_ws.send(json.dumps(forward))
-        return
-
-    # not found
-    await send_error(ws, "USER_NOT_FOUND", f"{target}")
+    # Delegate to the Router (Part 7)
+    await ctx.router.route_to_user(target, frame)
 
 # ---------- heartbeat helpers (§5.4) ----------
 

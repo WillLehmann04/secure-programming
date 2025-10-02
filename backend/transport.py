@@ -206,13 +206,8 @@ class TransportServer:
                 self.log.info("server connected: %s", link.tag())
 
             elif msg_type == T_USER_HELLO:
-                if peer_id in self.state.local_users:
-                    await self._send_error(ws, peer_id, ERR_NAME_IN_USE, "user_id already connected here")
-                    return
                 link = Link(ws=ws, role="user", peer_id=peer_id)
-                self.state.local_users[peer_id] = link
-                self.state.user_locations[peer_id] = "local"
-                self.log.info("user connected: %s", link.tag())
+                self.log.info("user hello received: %s", link.tag())
 
             else:
                 await self._send_error(ws, "", ERR_UNKNOWN_TYPE, "first frame must be HELLO")
@@ -309,3 +304,6 @@ class TransportServer:
             await ws.send(json.dumps(env, separators=(",", ":"), ensure_ascii=False))
         except Exception:
             pass
+
+Transport = TransportServer
+__all__ = ["TransportServer", "Transport"]

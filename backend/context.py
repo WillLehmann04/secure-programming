@@ -1,25 +1,36 @@
 # backend/context.py
-from __future__ import annotations
+import json
 from collections import deque
 
-class Ctx:
-    def __init__(self, server_id: str, host: str = "0.0.0.0", port: int = 8765):
+class Context:
+    def __init__(self, server_id: str, host: str, port: int):
         self.server_id = server_id
         self.host = host
         self.port = port
 
-        # server<->server mesh
-        self.peers = {}              # sid -> websocket
-        self.server_addrs = {}       # sid -> (host, port)
-        self.peer_last_seen = {}     # sid -> last heartbeat time (float)
+        # server mesh
+        self.peers = {}            # sid -> ws
+        self.server_addrs = {}     # sid -> (host, port)
+        self.peer_last_seen = {}   # sid -> last heartbeat ts
 
-        # users connected to *this* server
-        self.local_users = {}        # user_id -> websocket
-        self.user_locations = {}     # user_id -> "local" | server_id
+        # users
+        self.local_users = {}      # uid -> ws
+        self.user_locations = {}   # uid -> "local" | sid
 
-        # dedupe memory (bounded by run_mesh wiring)
-        self.seen_ids = set()        # keys from make_seen_key(frame)
-        self.seen_queue = deque()    # for bounded LRU if you later enable it
+        # dedupe (simple bounded set+queue)
+        self.seen_ids = set()
+        self.seen_queue = deque(maxlen=10000)
 
-        # will be set by the runner
-        self.router = None           # backend.routing.Router
+        # router will be attached by main.py
+        self.router = None
+
+    # --- tiny send helpers used by Router lambdas ---
+    async def send_to_local(self, uid: str, frame: dict) -> None:
+        ws = self.local_users.get(uid)
+        if ws:
+            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))
+
+    async def send_to_peer(self, sid: str, frame: dict) -> None:
+        ws = self.peers.get(sid)
+        if ws:
+            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))

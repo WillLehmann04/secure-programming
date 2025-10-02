@@ -1,241 +1,128 @@
 # backend/protocol_handlers.py
 import json, hashlib, time
-from backend.crypto.json_format import stabilise_json
 from collections import deque
-
+from backend.crypto.json_format import stabilise_json
 
 # ---------- utilities ----------
 def make_seen_key(frame: dict) -> str:
-    # hash(ts|from|to|hash(canonical(payload))) per §5.3
     ts = str(frame.get("ts", 0))
     f  = frame.get("from", "")
     t  = frame.get("to", "")
-    # Part-4 canonical JSON (bytes)
     payload_bytes = stabilise_json(frame.get("payload", {}))
     h = hashlib.sha256(payload_bytes).hexdigest()
     return f"{ts}|{f}|{t}|{h}"
 
-# Bounded dedupe memory: keep last N seen keys
-DEDUP_MAX = 10_000  # adjust if needed
+DEDUP_MAX = 10_000
 
 def remember_seen(ctx, key: str) -> bool:
-    """
-    Returns True if key was already seen.
-    Otherwise records it (bounded) and returns False.
-    Requires ctx.seen_ids: set[str] and ctx.seen_queue: deque[str]
-    """
-    if key in ctx.seen_ids:
-        return True
+    if key in ctx.seen_ids: return True
     ctx.seen_ids.add(key)
-    ctx.seen_queue.append(key)
-    if len(ctx.seen_queue) > DEDUP_MAX:
-        old = ctx.seen_queue.popleft()
-        ctx.seen_ids.discard(old)
+    ctx.seen_queue.append(key)  # bounded by maxlen
     return False
 
-
 async def send_error(ws, code: str, detail: str = ""):
-    await ws.send(json.dumps({
-        "type":"ERROR",
-        "payload":{"code":code,"detail":detail}
-    }))
+    await ws.send(json.dumps({"type":"ERROR","payload":{"code":code,"detail":detail}}))
 
-
-# ---------- §5 Server <-> Server ----------
-
+# ---------- Server <-> Server ----------
 async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
-    """
-    Bootstrap (client -> introducer). We accept join, reply with SERVER_WELCOME,
-    and record address + pubkey (address is taken from payload).
-    """
-    peer_id = frame.get("from")
+    sid = frame.get("from")
     pay = frame.get("payload", {})
     host, port = pay.get("host"), pay.get("port")
-    if not (peer_id and host and port):
+    if not (sid and host and port):
         return await send_error(ws, "UNKNOWN_TYPE", "bad join payload")
+    ctx.peers[sid] = ws
+    ctx.server_addrs[sid] = (host, int(port))
+    ctx.peer_last_seen[sid] = time.time()
 
-    ctx.peers[peer_id] = ws
-    ctx.server_addrs[peer_id] = (host, int(port))
-    ctx.peer_last_seen[peer_id] = time.time()
-
-    # known peers snapshot
-    peers_brief = [
-        {"id": sid, "host": h, "port": p}
-        for sid,(h,p) in ctx.server_addrs.items()
-    ]
-
+    peers_brief = [{"id": k, "host": h, "port": p} for k,(h,p) in ctx.server_addrs.items()]
     await ws.send(json.dumps({
-        "type":"SERVER_WELCOME",
-        "from": ctx.server_id,
-        "to":   peer_id,
-        "ts":   int(time.time()*1000),
-        "payload":{
-            "assigned_id": peer_id,   # if you assign IDs, return them here
-            "peers": peers_brief
-        },
-        "sig": ""  # transport already verified upstream in real build
+        "type":"SERVER_WELCOME","from":ctx.server_id,"to":sid,"ts":int(time.time()*1000),
+        "payload":{"assigned_id": sid, "peers": peers_brief},"sig":""
     }))
 
-    # announce ourselves to mesh
-    announce = {
-        "type":"SERVER_ANNOUNCE",
-        "from":ctx.server_id,
-        "to":"*",
-        "ts":int(time.time()*1000),
-        "payload":{"host":ctx.host,"port":ctx.port}
-    }
-    for sid, pws in ctx.peers.items():
-        if pws is not ws:
-            await pws.send(json.dumps(announce))
-
 async def handle_SERVER_ANNOUNCE(ctx, ws, frame):
-    """Install/update peer address book (§5.1)."""
-    sid = frame.get("from")
-    pay = frame.get("payload",{})
+    sid = frame.get("from"); pay = frame.get("payload",{})
     host, port = pay.get("host"), pay.get("port")
     if sid and host and port:
         ctx.server_addrs[sid] = (host, int(port))
         ctx.peer_last_seen[sid] = time.time()
 
 async def handle_USER_ADVERTISE(ctx, ws, frame):
-    """
-    Presence gossip (§5.2). Receivers verify, set mapping, and re-gossip.
-    Here we trust transport signature; verify hook can be added.
-    """
-    # dedupe to prevent gossip storms
     key = make_seen_key(frame)
-    if remember_seen(ctx, key):  # or do the inline set() check if you skipped the LRU helper
-        return
-
+    if remember_seen(ctx, key): return
     user_id = frame.get("payload",{}).get("user_id") or frame.get("from")
     loc     = frame.get("payload",{}).get("location") or frame.get("from_server")
-    if not (user_id and loc):
-        return
-
-    ctx.user_locations[user_id] = loc
-
-    # re-gossip to other peers (fan-out)
-    for sid, pws in ctx.peers.items():
+    if not (user_id and loc): return
+    ctx.router.record_presence(user_id, loc)
+    for sid,pws in ctx.peers.items():
         if pws != ws:
             await pws.send(json.dumps(frame))
-
 
 async def handle_USER_REMOVE(ctx, ws, frame):
     user_id = frame.get("payload",{}).get("user_id")
     loc     = frame.get("payload",{}).get("location")
-    if not user_id: return
-    # delete only if mapping still points to that server (§5.2)
-    if ctx.user_locations.get(user_id) == loc:
+    if user_id and ctx.user_locations.get(user_id) == loc:
         ctx.user_locations.pop(user_id, None)
 
 async def handle_PEER_DELIVER(ctx, ws, frame):
-    """
-    Forwarded delivery (§5.3). Do not decrypt; just route.
-    Use seen_ids to suppress duplicates / loops.
-    """
     key = make_seen_key(frame)
-    if key in ctx.seen_ids:
-        return  # duplicate; drop
-    ctx.seen_ids.add(key)
-
+    if remember_seen(ctx, key): return
     target = frame.get("payload",{}).get("user_id") or frame.get("to")
-    await _route_to_user(ctx, ws, frame, target)
-
+    await ctx.router.route_to_user(target, frame.get("payload",{}).get("forwarded", frame))
 
 async def handle_HEARTBEAT(ctx, ws, frame):
     sid = frame.get("from")
-    if sid:
-        ctx.peer_last_seen[sid] = time.time()
+    if sid: ctx.router.note_peer_seen(sid)
 
-# ---------- §6 User <-> Server ----------
-
+# ---------- User <-> Server ----------
 async def handle_USER_HELLO(ctx, ws, frame):
-    """
-    Uniqueness check; on success:
-    - register local session
-    - set user_locations[u] = "local"
-    - broadcast USER_ADVERTISE
-    """
-    user_id = frame.get("from")
-    if not user_id:
-        return await send_error(ws, "UNKNOWN_TYPE", "missing user id")
-    if user_id in ctx.local_users:
-        return await send_error(ws, "NAME_IN_USE", "duplicate user")
+    uid = frame.get("from")
+    if not uid: return await send_error(ws, "UNKNOWN_TYPE", "missing user id")
 
-    ctx.local_users[user_id] = ws
-    ctx.user_locations[user_id] = "local"
+    # last-login-wins (optional) — replace with reject if you prefer strict
+    old = ctx.local_users.get(uid)
+    if old and old is not ws:
+        try: await old.close(code=1000, reason="replaced")
+        except Exception: pass
+        ctx.local_users.pop(uid, None)
+        ctx.user_locations.pop(uid, None)
 
-    advert = {
-        "type":"USER_ADVERTISE",
-        "from":ctx.server_id,
-        "to":"*",
-        "ts":int(time.time()*1000),
-        "payload":{"user_id":user_id, "location":ctx.server_id}
-    }
-    for _, pws in ctx.peers.items():
-        await pws.send(json.dumps(advert))
-
+    ctx.local_users[uid] = ws
+    ctx.router.record_presence(uid, "local")
     await ws.send(json.dumps({"type":"ACK","payload":{"msg_ref":"USER_HELLO"}}))
 
 async def handle_MSG_DIRECT(ctx, ws, frame):
-    """
-    End-to-end encrypted DM (§6.2). Server does NOT decrypt.
-    Route same-server or to remote via PEER_DELIVER envelope.
-    """
     target = frame.get("to")
-    await _route_to_user(ctx, ws, frame, target)
+    try:
+        await ctx.router.route_to_user(target, frame)
+    except Exception as e:
+        await send_error(ws, "USER_NOT_FOUND", str(e))
 
 async def handle_MSG_PUBLIC_CHANNEL(ctx, ws, frame):
-    """
-    Public broadcast (§6.3). Fan-out to locals + peers.
-    (Key distribution messages like PUBLIC_CHANNEL_KEY_SHARE can reuse this routing.)
-    """
-    # local users
+    # fan-out to local users
     for uid, uws in ctx.local_users.items():
         if uws is not ws:
             await uws.send(json.dumps(frame))
-    # peers
+    # fan-out to peers
     for _, pws in ctx.peers.items():
         await pws.send(json.dumps(frame))
 
-async def handle_FILE_START(ctx, ws, frame):
-    # stub for §6.4; just forward using same routing as MSG_DIRECT
-    target = frame.get("to")
-    await _route_to_user(ctx, ws, frame, target)
+async def handle_FILE_START(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
+async def handle_FILE_CHUNK(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
+async def handle_FILE_END(ctx, ws, frame):    await handle_MSG_DIRECT(ctx, ws, frame)
 
-async def handle_FILE_CHUNK(ctx, ws, frame):
-    target = frame.get("to")
-    await _route_to_user(ctx, ws, frame, target)
+# ---------- registration ----------
+def register_protocol_handlers(server, ctx):
+    server.on("SERVER_HELLO_JOIN", lambda env, link: handle_SERVER_HELLO_JOIN(ctx, link.ws, env))
+    server.on("SERVER_ANNOUNCE",   lambda env, link: handle_SERVER_ANNOUNCE(ctx, link.ws, env))
+    server.on("USER_ADVERTISE",    lambda env, link: handle_USER_ADVERTISE(ctx, link.ws, env))
+    server.on("USER_REMOVE",       lambda env, link: handle_USER_REMOVE(ctx, link.ws, env))
+    server.on("PEER_DELIVER",      lambda env, link: handle_PEER_DELIVER(ctx, link.ws, env))
+    server.on("HEARTBEAT",         lambda env, link: handle_HEARTBEAT(ctx, link.ws, env))
 
-async def handle_FILE_END(ctx, ws, frame):
-    target = frame.get("to")
-    await _route_to_user(ctx, ws, frame, target)
-
-# ---------- routing core (authoritative §7) ----------
-
-async def _route_to_user(ctx, ws, frame, target: str):
-    # Delegate to the Router (Part 7)
-    await ctx.router.route_to_user(target, frame)
-
-# ---------- heartbeat helpers (§5.4) ----------
-
-async def periodic_heartbeats(ctx, send_fn):
-    """
-    send_fn(sid, frame_dict) must send a frame to peer sid.
-    Transport can schedule this as an asyncio.Task.
-    """
-    while True:
-        now_ms = int(time.time()*1000)
-        hb = {"type":"HEARTBEAT","from":ctx.server_id,"to":"*","ts":now_ms,"payload":{}}
-        for sid in list(ctx.peers.keys()):
-            await send_fn(sid, hb)
-        # reap dead peers
-        now = time.time()
-        for sid, last in list(ctx.peer_last_seen.items()):
-            if now - last > 45:
-                ctx.peers.pop(sid, None)
-                ctx.peer_last_seen.pop(sid, None)
-        await asyncio.sleep(15)
-
-# (import placed at bottom to avoid circular import if transport imports handlers)
-import asyncio  # noqa
+    server.on("USER_HELLO",        lambda env, link: handle_USER_HELLO(ctx, link.ws, env))
+    server.on("MSG_DIRECT",        lambda env, link: handle_MSG_DIRECT(ctx, link.ws, env))
+    server.on("MSG_PUBLIC_CHANNEL",lambda env, link: handle_MSG_PUBLIC_CHANNEL(ctx, link.ws, env))
+    server.on("FILE_START",        lambda env, link: handle_FILE_START(ctx, link.ws, env))
+    server.on("FILE_CHUNK",        lambda env, link: handle_FILE_CHUNK(ctx, link.ws, env))
+    server.on("FILE_END",          lambda env, link: handle_FILE_END(ctx, link.ws, env))

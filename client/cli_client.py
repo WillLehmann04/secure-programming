@@ -37,7 +37,7 @@ _group_key_cache: dict[str, bytes] = {}    # user_id
 
 # small utils
 def now_ts() -> str:
-    return str(int(time.time() * 1000))
+    return int(time.time() * 1000)
 
 def sha256_bytes(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
@@ -49,7 +49,6 @@ def b64u(data: bytes) -> str:
     return base64url_encode(data)
 
 def signed_transport_sig(payload_obj: dict, privkey_pem: bytes) -> str:
-    # Transport sig over canonical payload
     b = stabilise_json(payload_obj)
     sig = rsa_sign_pss(privkey_pem, b)
     return b64u(sig)
@@ -81,13 +80,47 @@ def load_client_keys_from_config(cfg_path: str) -> Tuple[str, bytes, str]:
     return user_id, priv_pem, pub_pem
 
 # Envelope builders
-def build_user_hello(user_id: str, pubkey_pem: str) -> dict:
-    return {"type": "USER_HELLO", "payload": {"user_id": user_id, "pubkey": pubkey_pem}, "ts": now_ts()}
+''' USER_HELLO '''
+def build_user_hello(server_id: str, user_id: str, pubkey_pem: str, privatekey_pem: bytes) -> dict:
+    ''' -- CRAFT THE PAYLOAD -- '''
+    payload = {
+        "client": "cli-v1",
+        "pubkey": pubkey_pem,
+        "enc_pubkey": pubkey_pem,  # placeholder; actual key exchange not implemented
+    }   
 
-def build_msg_direct(ciphertext_b64u: str, frm: str, to: str, ts: str, content_sig_b64u: str) -> dict:
-    payload = {"ciphertext": ciphertext_b64u, "from": frm, "to": to, "ts": ts, "content_sig": content_sig_b64u}
-    return {"type": "MSG_DIRECT", "payload": payload}
+    return {
+        "type": "USER_HELLO",
+        "from": user_id,
+        "to": server_id,
+        "ts": now_ts(),
+        "payload": payload,
+        "sig": signed_transport_sig(payload, privatekey_pem),
+    }
 
+''' MSG_DIRECT '''
+def build_msg_direct(ciphertext: str, sender_user_id: str, recipient_user_id: str, sender_pub: str, content_sig: str, privkey_pem: bytes) -> dict:
+    ''' -- CRAFT THE PAYLOAD -- '''
+    payload = {
+        "ciphertext": ciphertext,
+        "sender_pub": sender_pub,
+        "content_sig": content_sig,
+    }
+
+    return {
+        "type": "MSG_DIRECT",
+        "from": sender_user_id,
+        "to": recipient_user_id,
+        "ts": now_ts(),
+        "payload": payload,
+        "sig": signed_transport_sig(payload, privkey_pem),
+    }
+
+    #payload = {"ciphertext": ciphertext_b64u, "from": frm, "to": to, "ts": ts, "content_sig": content_sig_b64u}
+    #return {"type": "MSG_DIRECT", "payload": payload}
+
+
+''' TODO: FIX THSESE  '''
 def build_msg_public(nonce_b64u: str, ct_b64u: str, frm: str, ts: str, content_sig_b64u: str) -> dict:
     payload = {"nonce": nonce_b64u, "ciphertext": ct_b64u, "from": frm, "ts": ts, "content_sig": content_sig_b64u}
     return {"type": "MSG_PUBLIC_CHANNEL", "payload": payload}

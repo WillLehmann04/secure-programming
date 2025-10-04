@@ -37,7 +37,7 @@ _group_key_cache: dict[str, bytes] = {}    # user_id
 
 # small utils
 def now_ts() -> str:
-    return str(int(time.time()))
+    return str(int(time.time() * 1000))
 
 def sha256_bytes(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()

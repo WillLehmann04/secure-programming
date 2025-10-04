@@ -22,3 +22,13 @@ def verify_direct_message_signature(public_key_pem: bytes, signature_b64: str, c
     blob = (ciphertext_b64 + from_ID + to_ID + str(timestamp)).encode('utf-8')
     signature = base64url_decode(signature_b64)           # expects str -> bytes
     return rsa_verify_pss(public_key_pem, blob, signature)
+
+def sign_server_frame(ctx, payload):
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(ctx.server_private_key, payload_bytes)
+    return base64url_encode(sig)
+
+def verify_server_frame(server_pubkey_pem, payload, sig_b64):
+    payload_bytes = stabilise_json(payload)
+    sig = base64url_decode(sig_b64)
+    return rsa_verify_pss(server_pubkey_pem, payload_bytes, sig)

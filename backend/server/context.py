@@ -12,6 +12,9 @@ class Context:
         self.peers = {}            # sid -> ws
         self.server_addrs = {}     # sid -> (host, port)
         self.peer_last_seen = {}   # sid -> last heartbeat ts
+        self.user_pubkeys = {}
+        self.peer_pubkeys = {}
+        self.user_advertise_envelopes = {}
 
         # users
         self.local_users = {}      # uid -> ws

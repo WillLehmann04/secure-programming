@@ -23,6 +23,7 @@ from typing import Awaitable, Callable, Dict, Optional, Tuple
 
 import websockets
 from websockets.server import WebSocketServerProtocol
+from backend.crypto.content_sig import sign_server_frame
 
 # ------------ Protocol constants (keep aligned with the class spec) ------------
 
@@ -226,10 +227,30 @@ class TransportServer:
             if link:
                 if link.role == "user":
                     self.state.local_users.pop(link.peer_id, None)
+                    self.state.user_locations.pop(link.peer_id, None)
+                    # Broadcast USER_REMOVE to all mesh peers
+                    user_remove_env = {
+                        "type": "USER_REMOVE",
+                        "from": link.peer_id,
+                        "to": "",
+                        "ts": int(time.time() * 1000),
+                        "payload": {"user_id": link.peer_id, "location": "local"},
+                        "sig": "",
+                        "alg": "PS256",
+                    }
+                    for peer_link in self.state.servers.values():
+                        try:
+                            await peer_link.ws.send(json.dumps(user_remove_env))
+                        except Exception:
+                            pass
+
+                    # Call the protocol handler locally as well
+                    if "USER_REMOVE" in self._handlers:
+                        await self._handlers["USER_REMOVE"](user_remove_env, link)
+
                 else:
                     self.state.servers.pop(link.peer_id, None)
                 self.log.info("disconnected: %s", link.tag())
-
     async def _handle_frame(self, message: str, link: Link) -> None:
 
         """Parse, structure-check, optional signature-check, then dispatch."""
@@ -279,11 +300,19 @@ class TransportServer:
             while True:
                 await asyncio.sleep(self._heartbeat_interval)
                 now_ms = int(time.time() * 1000)
-                heart = {"type": T_HEARTBEAT, "from": "server", "to": "*", "ts": now_ms, "payload": {}}
+                payload = {}
+                sig_b64 = sign_server_frame(self.ctx, payload)  # Pass the correct ctx
+                heart = {
+                    "type": T_HEARTBEAT,
+                    "from": self.ctx.server_id,
+                    "to": "*",
+                    "ts": now_ms,
+                    "payload": payload,
+                    "sig": sig_b64,
+                    "alg": "PS256"
+                }
                 msg = json.dumps(heart, separators=(",", ":"), ensure_ascii=False)
-
                 # Broadcast to servers
-
                 tasks = [asyncio.create_task(link.ws.send(msg)) for link in self.state.servers.values()]
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)

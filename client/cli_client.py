@@ -19,6 +19,7 @@ from backend.crypto import (
 
 from backend.crypto.rsa_oaep import oaep_encrypt, oaep_decrypt
 from backend.server.serverID import Serverid
+from backend.identifiers.tables import InMemoryTables
 
 """
 Return (user_id, privkey_pem_bytes, pubkey_pem_str)
@@ -58,6 +59,10 @@ def content_sig_dm(ciphertext_bytes: bytes, frm: str, to: str, ts: str, privkey_
     d = sha256_bytes(ciphertext_bytes + frm.encode() + to.encode() + ts.encode())
     return b64u(rsa_sign_pss(privkey_pem, d))
 
+def dm_seen_key(payload: dict) -> str:
+    s = f"{payload.get('from')}|{payload.get('to')}|{payload.get('ts')}|{payload.get('ciphertext')}"
+    return hashlib.sha256(s.encode()).hexdigest()
+
 def content_sig_public(ciphertext_bytes: bytes, frm: str, ts: str, privkey_pem: bytes) -> str:
     d = sha256_bytes(ciphertext_bytes + frm.encode() + ts.encode())
     return b64u(rsa_sign_pss(privkey_pem, d))
@@ -95,32 +100,128 @@ def build_user_hello(server_id: str, user_id: str, pubkey_pem: str, privatekey_p
         "alg": "PS256",  # <-- REQUIRED BY SOCP
     }
 
-''' MSG_DIRECT '''
-def build_msg_direct(ciphertext: str, sender_user_id: str, recipient_user_id: str, sender_pub: str, content_sig: str, privkey_pem: bytes) -> dict:
-    ''' -- CRAFT THE PAYLOAD -- '''
+def build_user_advertise_envelope(
+    user_id: str,
+    pubkey: str,
+    privkey_store: str,
+    pake_password: str,
+    meta: dict,
+    version: str,
+    privkey_pem: bytes,
+    to: str = "*",
+    ts: int = None
+):
+    """
+    Build a SOCP-compliant USER_ADVERTISE envelope.
+    """
+    if ts is None:
+        ts = int(time.time() * 1000)
     payload = {
-        "ciphertext": ciphertext,
-        "sender_pub": sender_pub,
-        "content_sig": content_sig,
+        "user_id": user_id,
+        "pubkey": pubkey,
+        "privkey_store": privkey_store,
+        "pake_password": pake_password,
+        "meta": meta,
+        "version": version,
+    }
+    # You may need to import stabilise_json, rsa_sign_pss, base64url_encode
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(privkey_pem, payload_bytes)
+    sig_b64 = base64url_encode(sig)
+    return {
+        "type": "USER_ADVERTISE",
+        "from": user_id,
+        "to": to,
+        "ts": ts,
+        "payload": payload,
+        "sig": sig_b64,
+        "alg": "PS256",
     }
 
+def build_user_remove(user_id: str, privkey_pem: bytes) -> dict:
+    payload = {
+        "user_id": user_id,
+        "location": "local"
+    }
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(privkey_pem, payload_bytes)
+    sig_b64 = base64url_encode(sig)
+    return {
+        "type": "USER_REMOVE",
+        "from": user_id,
+        "to": "",
+        "ts": int(time.time() * 1000),
+        "payload": payload,
+        "sig": sig_b64,
+        "alg": "PS256",
+    }
+
+''' MSG_DIRECT '''
+def build_msg_direct(ciphertext, sender_user_id, recipient_user_id, ts, content_sig, privkey_pem):
+    payload = {
+        "ciphertext": ciphertext,
+        "from": sender_user_id,
+        "to": recipient_user_id,
+        "ts": ts,
+        "content_sig": content_sig,
+    }
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(privkey_pem, payload_bytes)
+    sig_b64 = base64url_encode(sig)
     return {
         "type": "MSG_DIRECT",
         "from": sender_user_id,
         "to": recipient_user_id,
-        "ts": now_ts(),
+        "ts": ts,
         "payload": payload,
-        "sig": signed_transport_sig(payload, privkey_pem),
+        "sig": sig_b64,
+        "alg": "PS256",
     }
 
-    #payload = {"ciphertext": ciphertext_b64u, "from": frm, "to": to, "ts": ts, "content_sig": content_sig_b64u}
-    #return {"type": "MSG_DIRECT", "payload": payload}
-
+async def cmd_channel(ws, user_id: str, privkey_pem: bytes, channel_id: str, text: str):#was made before we got rid of the channel option
+    ts = now_ts()
+    payload = {
+        "ciphertext": text,  # plaintext for public channels
+        "from": user_id,
+        "to": channel_id,
+        "ts": ts,
+    }
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(privkey_pem, payload_bytes)
+    sig_b64 = base64url_encode(sig)
+    env = {
+        "type": "MSG_PUBLIC_CHANNEL",
+        "from": user_id,
+        "to": channel_id,
+        "ts": ts,
+        "payload": payload,
+        "sig": sig_b64,
+        "alg": "PS256",
+    }
+    await ws.send(json.dumps(env))
 
 ''' TODO: FIX THSESE  '''
-def build_msg_public(nonce_b64u: str, ct_b64u: str, frm: str, ts: str, content_sig_b64u: str) -> dict:
-    payload = {"nonce": nonce_b64u, "ciphertext": ct_b64u, "from": frm, "ts": ts, "content_sig": content_sig_b64u}
-    return {"type": "MSG_PUBLIC_CHANNEL", "payload": payload}
+def build_msg_public(nonce_b64u: str, ct_b64u: str, frm: str, ts: int, content_sig_b64u: str, privkey_pem: bytes, channel_id: str) -> dict:
+    payload = {
+        "nonce": nonce_b64u,
+        "ciphertext": ct_b64u,
+        "from": frm,
+        "to": channel_id,
+        "ts": ts,
+        "content_sig": content_sig_b64u,
+    }
+    payload_bytes = stabilise_json(payload)
+    sig = rsa_sign_pss(privkey_pem, payload_bytes)
+    sig_b64 = base64url_encode(sig)
+    return {
+        "type": "MSG_PUBLIC_CHANNEL",
+        "from": frm,
+        "to": channel_id,
+        "ts": ts,
+        "payload": payload,
+        "sig": sig_b64,
+        "alg": "PS256",
+    }
 
 def build_file_start(manifest: dict, frm: str, to: str | None, ts: str) -> dict:
     return {"type": "FILE_START", "payload": {"manifest": manifest, "from": frm, "to": to, "ts": ts}}
@@ -131,21 +232,55 @@ def build_file_chunk(index: int, chunk_b64u: str, frm: str, to: str | None, ts: 
 def build_file_end(manifest_summary: dict, frm: str, to: str | None, ts: str) -> dict:
     return {"type": "FILE_END", "payload": {"summary": manifest_summary, "from": frm, "to": to, "ts": ts}}
 
-# Cleient RPC Pumping
-async def listener(ws):
+async def listener(ws, privkey_pem, tables):
     async for msg in ws:
         try:
             obj = json.loads(msg)
         except Exception:
-            print("[IN ] raw:", msg)
+            print("[IN] raw:", msg)
             continue
+
+        if obj.get("type") == "USER_DELIVER":
+            payload = obj.get("payload", {})
+            key = dm_seen_key(payload)
+            if tables.seen_ids.contains(key):
+                print(f"[DM from {payload.get('from')}] <duplicate/replay detected, dropped>")
+                continue
+            tables.seen_ids.add(key)
+            ciphertext_b64 = payload.get("ciphertext")
+            sender = payload.get("from")
+            ts = payload.get("ts")
+            if ciphertext_b64:
+                try:
+                    plaintext = oaep_decrypt(privkey_pem, base64url_decode(ciphertext_b64))
+                    print(f"[DM from {sender} @ {ts}] {plaintext.decode('utf-8', errors='replace')}")
+                except Exception as e:
+                    print(f"[DM from {sender} @ {ts}] <decryption failed: {e}>")
+            continue
+
+        if obj.get("type") == "MSG_PUBLIC_CHANNEL":
+            payload = obj.get("payload", {})
+            sender = payload.get("from")
+            channel = payload.get("to")
+            ts = payload.get("ts")
+            text = payload.get("ciphertext")
+            print(f"[#{channel}] {sender} @ {ts}: {text}")
+            continue
+
+        # Cache public keys from USER_ADVERTISE
+        if obj.get("type") == "USER_ADVERTISE":
+            payload = obj.get("payload", {})
+            user_id = payload.get("user_id")
+            print(f"DEBUG: Received USER_ADVERTISE for {user_id}")
+            pubkey_pem = payload.get("pubkey")
+            if user_id and pubkey_pem:
+                tables.user_pubkeys[user_id] = pubkey_pem.encode("utf-8")
 
         rid = obj.get("req_id")
         if rid and rid in _pending:
             _pending.pop(rid).set_result(obj)
             continue
 
-        # unsolicited frames
         print("[IN ]", json.dumps(obj, indent=2))
 
 async def rpc(ws, typ: str, payload: dict, timeout: float = 5.0) -> dict:
@@ -157,13 +292,6 @@ async def rpc(ws, typ: str, payload: dict, timeout: float = 5.0) -> dict:
         return await asyncio.wait_for(fut, timeout)
     finally:
         _pending.pop(rid, None)
-
-# Dir lookups
-async def get_recipient_pubpem(ws, user_id: str) -> bytes:
-    resp = await rpc(ws, "DIR_GET_PUBKEY", {"user_id": user_id})
-    if resp.get("type") == "ERROR":
-        raise RuntimeError(f"DIR_GET_PUBKEY failed: {resp['payload']}")
-    return resp["payload"]["pubkey"].encode("utf-8")
 
 async def get_public_group_key_for_client(ws, me: str, privkey_pem: bytes) -> bytes:
     if me in _group_key_cache:
@@ -177,54 +305,81 @@ async def get_public_group_key_for_client(ws, me: str, privkey_pem: bytes) -> by
     return clear
 
 # high level commands
-async def cmd_list(ws, user_id: str):
-    await ws.send(json.dumps({"type": "CMD_LIST", "payload": {"from": user_id}, "ts": now_ts()}))
+async def cmd_list(ws, user_id: str, server_id: str):
+    await ws.send(json.dumps({
+        "type": "CMD_LIST",
+        "from": user_id,
+        "to": server_id, 
+        "payload": {},
+        "ts": now_ts()
+    }))
 
-async def cmd_tell(ws, user_id: str, privkey_pem: bytes, to: str, text: str):
-    plain = text.encode("utf-8")
-    ts = now_ts()
-    if len(plain) <= OAEP_MAX_PLAINTEXT:
-        recipient_pub = await get_recipient_pubpem(ws, to)
-        ciphertext = oaep_encrypt(recipient_pub, plain)
-        ciphertext_b64u = b64u(ciphertext)
-        content_sig = content_sig_dm(ciphertext, user_id, to, ts, privkey_pem)
-        env = build_msg_direct(ciphertext_b64u, user_id, to, ts, content_sig)
-        env["transport_sig"] = signed_transport_sig(env["payload"], privkey_pem)
-        await ws.send(json.dumps(env))
-    else:
-        chunks = chunk_plaintext(plain)
-        for i, ch in enumerate(chunks):
-            recipient_pub = await get_recipient_pubpem(ws, to)
-            ciphertext = oaep_encrypt(recipient_pub, ch)
-            payload_ts = now_ts()
-            content_sig = content_sig_dm(ciphertext, user_id, to, payload_ts, privkey_pem)
-            env = {
-                "type": "MSG_DIRECT_CHUNK",
-                "payload": {
+import traceback
+
+async def cmd_tell(ws, user_id: str, privkey_pem: bytes, to: str, text: str, tables):
+    print("DEBUG: Entered cmd_tell")
+    try:
+        plain = text.encode("utf-8")
+        print(f"DEBUG: Encoded plain: {plain!r}")
+        recipient_pub = tables.user_pubkeys.get(to)
+        if not recipient_pub:
+            print(f"ERROR: No public key for user {to}. Try /list and wait for USER_ADVERTISE.")
+            return
+        ts = now_ts()
+        if len(plain) <= OAEP_MAX_PLAINTEXT:
+            print(f"DEBUG: Message is short ({len(plain)} bytes), using single envelope")
+            ciphertext = oaep_encrypt(recipient_pub, plain)
+            print(f"DEBUG: Encrypted ciphertext: {ciphertext[:30]!r}...")
+            ciphertext_b64u = b64u(ciphertext)
+            content_sig = content_sig_dm(ciphertext, user_id, to, str(ts), privkey_pem)
+            env = build_msg_direct(ciphertext_b64u, user_id, to, ts, content_sig, privkey_pem)
+            print("DEBUG OUTGOING ENVELOPE:", json.dumps(env, indent=2))
+            await ws.send(json.dumps(env))
+            print("DEBUG: Envelope sent")
+        else:
+            print(f"DEBUG: Message is long ({len(plain)} bytes), using chunked envelopes")
+            chunks = chunk_plaintext(plain)
+            print(f"DEBUG: Split into {len(chunks)} chunks")
+            for i, ch in enumerate(chunks):
+                print(f"DEBUG: Processing chunk {i}, size {len(ch)}")
+                recipient_pub = tables.user_pubkeys.get(to)
+                print(f"DEBUG: Got recipient_pub for {to}: {recipient_pub[:30]!r}...")
+                chunk_ts = now_ts()
+                ciphertext = oaep_encrypt(recipient_pub, ch)
+                print(f"DEBUG: Encrypted chunk {i}: {ciphertext[:30]!r}...")
+                content_sig = content_sig_dm(ciphertext, user_id, to, str(chunk_ts), privkey_pem)
+                print(f"DEBUG: Got content_sig for chunk {i}: {content_sig[:30]!r}...")
+                payload = {
                     "ciphertext": b64u(ciphertext),
                     "from": user_id,
                     "to": to,
                     "index": i,
-                    "ts": payload_ts,
+                    "ts": chunk_ts,
                     "content_sig": content_sig,
-                },
-            }
-            env["transport_sig"] = signed_transport_sig(env["payload"], privkey_pem)
-            await ws.send(json.dumps(env))
+                }
+                payload_bytes = stabilise_json(payload)
+                print(f"DEBUG: Stabilised payload for chunk {i}: {payload_bytes[:30]!r}...")
+                sig = rsa_sign_pss(privkey_pem, payload_bytes)
+                sig_b64 = base64url_encode(sig)
+                print(f"DEBUG: Envelope sig for chunk {i}: {sig_b64[:30]!r}...")
+                env = {
+                    "type": "MSG_DIRECT_CHUNK",
+                    "from": user_id,
+                    "to": to,
+                    "ts": chunk_ts,
+                    "payload": payload,
+                    "sig": sig_b64,
+                    "alg": "PS256",
+                }
+                print("DEBUG OUTGOING ENVELOPE (chunk):", json.dumps(env, indent=2))
+                await ws.send(json.dumps(env))
+                print(f"DEBUG: Chunk {i} envelope sent")
+    except Exception as e:
+        print("ERROR in cmd_tell:", e)
+        traceback.print_exc()
 
 async def cmd_all(ws, user_id: str, privkey_pem: bytes, text: str):
-    plain = text.encode("utf-8")
-    ts = now_ts()
-    # unwrap current 32-byte public group key (symmetric)
-    gk = await get_public_group_key_for_client(ws, user_id, privkey_pem)
-    # encrypt with AES-GCM
-    nonce, ct = aesgcm_encrypt(gk, plain, aad=f"{user_id}|{ts}".encode())
-    nonce_b64 = b64u(nonce)
-    ct_b64 = b64u(ct)
-    content_sig = content_sig_public(ct, user_id, ts, privkey_pem)
-    env = build_msg_public(nonce_b64, ct_b64, user_id, ts, content_sig)
-    env["transport_sig"] = signed_transport_sig(env["payload"], privkey_pem)
-    await ws.send(json.dumps(env))
+    await cmd_channel(ws, user_id, privkey_pem, "all", text)
 
 async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_bytes, maybe_bytes=None):
     if maybe_bytes is None:
@@ -251,8 +406,8 @@ async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_by
             payload_chunk = json.dumps({"nonce": b64u(nonce), "ciphertext": b64u(ct)})
             chunk_b64 = b64u(payload_chunk.encode("utf-8"))
         else:
-            recipient_pub = await get_recipient_pubpem(ws, target)
-            ct = oaep_encrypt(recipient_pub, ch)
+            #recipient_pub = tables.user_pubkeys.get(to)
+            #ct = oaep_encrypt(recipient_pub, ch)
             chunk_b64 = b64u(ct)
 
         chunk_env = build_file_chunk(i, chunk_b64, user_id, (None if target == "public" else target), now_ts())
@@ -266,15 +421,34 @@ async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_by
 
 # MAIN LOOP
 async def main_loop(cfg_path: str):
-    user_id, privkey_pem, pubkey_pem, server_id = load_client_keys_from_config(cfg_path)
+    # Load all required fields from config
+    cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
+    user_id = cfg["user_id"]
+    privkey_pem = base64url_decode(cfg["privkey_pem_b64"])
+    pubkey_pem = cfg["pubkey_pem"]
+    server_id = cfg["server_id"]
+    privkey_store = cfg.get("privkey_store", "")
+    pake_password = cfg.get("pake_password", "")
+    meta = cfg.get("meta", {"display_name": user_id})
+    version = cfg.get("version", "1.0")
+
     async with websockets.connect(WS_URL) as ws:
         # send USER_HELLO once
         envelope = build_user_hello(server_id, user_id, pubkey_pem, privkey_pem)
         await ws.send(json.dumps(envelope))
         print("sent USER_HELLO; awaiting server responses...")
 
+        # send SOCP-compliant USER_ADVERTISE
+        envelope = build_user_advertise_envelope(
+            user_id, pubkey_pem, privkey_store, pake_password, meta, version, privkey_pem
+        )
+        print("DEBUG: Sending USER_ADVERTISE envelope:\n", json.dumps(envelope, indent=2))
+        await ws.send(json.dumps(envelope))
+        print("sent USER_ADVERTISE")
+
         # background listener
-        listener_task = asyncio.create_task(listener(ws))
+        tables = InMemoryTables()
+        listener_task = asyncio.create_task(listener(ws, privkey_pem, tables))
 
         print("Enter commands: /list, /tell <user> <text>, /all <text>, /file <user|public> <path>")
         while True:
@@ -285,13 +459,15 @@ async def main_loop(cfg_path: str):
             if not line:
                 continue
             if line == "/list":
-                await cmd_list(ws, user_id)
+                await cmd_list(ws, user_id, server_id)
             elif line.startswith("/tell "):
                 parts = line.split(" ", 2)
                 if len(parts) < 3:
-                    print("usage: /tell <user> <text>"); continue
+                    print("usage: /tell <user> <text>")
+                    continue
                 to, text = parts[1], parts[2]
-                await cmd_tell(ws, user_id, privkey_pem, to, text)
+                print("DEBUG: Calling cmd_tell")
+                await cmd_tell(ws, user_id, privkey_pem, to, text, tables)
             elif line.startswith("/all "):
                 text = line[len("/all "):]
                 await cmd_all(ws, user_id, privkey_pem, text)
@@ -301,7 +477,10 @@ async def main_loop(cfg_path: str):
                     print("usage: /file <user|public> <path>"); continue
                 target, path = parts[1], parts[2]
                 await cmd_file(ws, user_id, privkey_pem, target, path)
-            elif line in ("/quit", "/exit"):
+            elif line == "/quit":
+                env = build_user_remove(user_id, privkey_pem)
+                await ws.send(json.dumps(env))
+                await ws.close()
                 break
             else:
                 print("unknown command", line)

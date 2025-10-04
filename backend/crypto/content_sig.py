@@ -1,8 +1,24 @@
+from hashlib import sha256
+from .base64url import base64url_encode, base64url_decode
 from .json_format import stabilise_json
 from .rsa_pss import rsa_sign_pss, rsa_verify_pss
 
-def sign_payload(priv, payload_obj) -> bytes:
-    return rsa_sign_pss(priv, stabilise_json(payload_obj))
+# ========== Helper function to convert String to bytes ========== 
+def convert_to_bytes(data: str) -> bytes:
+    if (isinstance(data, bytes)):
+        return data
+    return str(data).encode('utf-8')
 
-def verify_payload(pub, payload_obj, sig: bytes) -> bool:
-    return rsa_verify_pss(pub, stabilise_json(payload_obj), sig)
+# ========== Direct Message Signatures ========== 
+
+def sign_direct_message_signature(private_key_pem: bytes, ciphertext_b64: str, from_ID: str, to_ID: str, timestamp: int) -> str:
+    # SOCP section 12 specifies for DM (SHA256 ciphertext OR from OR to or TIMESTAMP)
+    blob = (ciphertext_b64 + from_ID + to_ID + str(timestamp)).encode('utf-8')
+    signature = rsa_sign_pss(private_key_pem, blob)
+    return base64url_encode(signature)
+
+def verify_direct_message_signature(public_key_pem: bytes, signature_b64: str, ciphertext_b64: str, from_ID: str, to_ID: str, timestamp: int) -> bool:
+    # SOCP section 12 specifies for DM (SHA256 ciphertext OR from OR to or TIMESTAMP)
+    blob = (ciphertext_b64 + from_ID + to_ID + str(timestamp)).encode('utf-8')
+    signature = base64url_decode(signature_b64)           # expects str -> bytes
+    return rsa_verify_pss(public_key_pem, blob, signature)

@@ -7,8 +7,9 @@ import logging
 import os
 import uuid
 
-from backend.context import Ctx
-from backend.routing import Router
+from backend.server.serverID import Serverid    
+from backend.server.context import Context
+from backend.routing.route import Router
 from backend.transport import TransportServer, Link, T_USER_HELLO, T_SERVER_HELLO_PREFIX, T_HEARTBEAT
 from backend.protocol_handlers import (
     handle_SERVER_HELLO_JOIN,
@@ -29,8 +30,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("backend.run_mesh")
 
 
-def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
-    ctx = Ctx(server_id=server_id, host=host, port=port)
+def _mk_ctx(server_id: str, host: str, port: int) -> Context:
+    ctx = Context(server_id=server_id, host=host, port=port)
 
     # router send callbacks — these use your ctx maps
     async def _send_to_peer(sid: str, frame: dict):
@@ -65,7 +66,7 @@ def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
 
 
 # --- adapt your Part-6 handler signatures (ctx, ws, frame) -> (env, link) ---
-def adapt(ctx: Ctx, handler):
+def adapt(ctx: Context, handler):
     async def _wrapped(env: dict, link: Link):
         # env is your "frame", link.ws is the websocket
         await handler(ctx, link.ws, env)
@@ -77,7 +78,7 @@ async def main():
     host = os.environ.get("SOCP_HOST", "0.0.0.0")
     port = int(os.environ.get("SOCP_PORT", "8765"))
     # Generate a stable-ish UUIDv4 for this server if not set
-    server_id = os.environ.get("SOCP_SERVER_ID") or str(uuid.uuid4())
+    server_id = Serverid().get()
 
     # Build context + router
     ctx = _mk_ctx(server_id, host, port)

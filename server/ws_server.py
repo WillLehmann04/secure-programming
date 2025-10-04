@@ -2,6 +2,8 @@ from __future__ import annotations
 import asyncio, json, hashlib
 from typing import Dict, Any, Callable, Optional
 
+from ..protocol.types import *
+
 import websockets
 from websockets.server import WebSocketServerProtocol
 
@@ -128,7 +130,7 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 uid = obj.get("from")
                 if not isinstance(uid, str) or not uid:
                     error = {
-                        "type": "ERROR",
+                        "type": ERROR,
                         "from": uid,
                         "to": obj.get("to"),
                         "payload": {"code": "USER_NOT_FOUND", "detail": "missing user_id"},
@@ -148,6 +150,22 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 # Record session
                 SESSIONS[uid] = ws
                 WS_TO_USER[ws] = uid
+
+                ###  As per SOCP a user advertise needs to be sent when an ack is about to be sent
+
+                advertise = {
+                    "type": "USER_ADVERTISE",
+                    "from": server,
+                    "to": obj.get("to"),
+                    "payload": {
+                        "user_id": uid,
+                        "pubkey": get_pubkey(uid).public_bytes().decode(),
+                    },
+                    "sig": "",
+                }
+
+
+
                 
                 ''' CONSTRUCT ACK '''
                 ACK = {

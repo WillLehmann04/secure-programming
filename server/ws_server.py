@@ -125,9 +125,16 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 continue
 
             if t == "USER_HELLO":
-                uid = p.get("user_id")
+                uid = obj.get("from")
                 if not isinstance(uid, str) or not uid:
-                    await ws.send(json.dumps({"type":"ERROR","payload":{"code":ERR_USER_NOT_FOUND,"message":"missing user_id"}}))
+                    error = {
+                        "type": "ERROR",
+                        "from": uid,
+                        "to": obj.get("to"),
+                        "payload": {"code": "USER_NOT_FOUND", "detail": "missing user_id"},
+                        "sig": "",
+                    }
+                    await ws.send(json.dumps(error))
                     continue
 
                 # Enforce the user exists in the directory, also not already connected under that name
@@ -141,7 +148,17 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                 # Record session
                 SESSIONS[uid] = ws
                 WS_TO_USER[ws] = uid
-                await ws.send(json.dumps({"type":"USER_HELLO_ACK","payload":{"user_id":uid}}))
+                
+                ''' CONSTRUCT ACK '''
+                ACK = {
+                    "type": "ACK",
+                    "from": uid,
+                    "to": obj.get("to"),
+                    "payload": {"msg_ref": uid},
+                    "sig":"",
+                }
+
+                await ws.send(json.dumps(ACK))
                 continue
 
             if t == "CMD_LIST":

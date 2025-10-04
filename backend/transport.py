@@ -88,6 +88,8 @@ def _is_valid_envelope_structure(env: dict) -> Tuple[bool, str]:
         return False, "from:not_string"
     if not isinstance(env["to"], str):
         return False, "to:not_string"
+    if env["to"] not in ("", "*") and not _is_uuid4(env["to"]):
+        return False, "to:not_uuid4_or_star"
     if not isinstance(env["ts"], (int, float)):
         return False, "ts:not_number"
     if not isinstance(env["payload"], dict):

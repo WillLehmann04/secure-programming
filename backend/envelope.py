@@ -173,3 +173,46 @@ def is_valid_envelope(env: dict, pubkey_lookup: Callable[[str], RSAPublicKey]) -
     Convenience wrapper for quick checks.
     """
     return make_verifier(pubkey_lookup)(env)
+
+# -----------------------------
+# Helpers used across transport/routing
+# -----------------------------
+
+from typing import Optional
+import time
+
+def make_envelope(
+    typ: str,
+    from_id: str,
+    to: str,
+    payload: dict,
+    *,
+    sign_with: Optional[RSAPrivateKey] = None,
+    ts: Optional[int] = None,
+) -> dict:
+    """
+    Building a canonical envelope and (optionally) sign it with RSA-PSS (PS256).
+    This is the single entry point all code should use to create frames.
+    """
+    env = {
+        "type": typ,
+        "from": from_id,
+        "to": to,
+        "ts": int(ts if ts is not None else time.time() * 1000),
+        "payload": payload,
+    }
+    if sign_with is not None:
+        sig_block = sign_payload(payload, sign_with)
+        env["sig"] = sig_block["sig"]
+        env["alg"] = sig_block["alg"]
+    return env
+
+
+def verify_envelope_signature(env: dict, pubkey_lookup: Callable[[str], RSAPublicKey]) -> bool:
+    """
+    Return True iff env['sig'] verifies over canonical(payload) for sender's pubkey.
+    Safe to call for HELLO frames that may be unsigned (returns False if missing sig).
+    """
+    if "sig" not in env:
+        return False
+    return is_valid_envelope(env, pubkey_lookup)

@@ -9,7 +9,14 @@ import uuid
 
 from backend.context import Ctx
 from backend.routing import Router
-from backend.transport import TransportServer, Link, T_USER_HELLO, T_SERVER_HELLO_PREFIX, T_HEARTBEAT
+from backend.transport import (
+    TransportServer,
+    Link,
+    T_USER_HELLO,
+    T_SERVER_HELLO_PREFIX,
+    T_HEARTBEAT,
+)
+
 from backend.protocol_handlers import (
     handle_SERVER_HELLO_JOIN,
     handle_SERVER_ANNOUNCE,
@@ -30,17 +37,20 @@ log = logging.getLogger("backend.run_mesh")
 
 
 def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
+    """
+    Build your process context and attach a Router with concrete send functions.
+    """
     ctx = Ctx(server_id=server_id, host=host, port=port)
 
-    # router send callbacks — these use your ctx maps
+    # --- send functions the Router will call ---
     async def _send_to_peer(sid: str, frame: dict):
         ws = ctx.peers.get(sid)
         if not ws:
             return
         try:
-            await ws.send(json.dumps(frame))
+            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))
         except Exception:
-            # peer likely closed; let reap handle it later
+            # peer likely closed; stale entry will be reaped by the hb loop
             pass
 
     async def _send_to_local(uid: str, frame: dict):
@@ -48,11 +58,12 @@ def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
         if not ws:
             return
         try:
-            await ws.send(json.dumps(frame))
+            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))
         except Exception:
             # client likely disconnected
             pass
 
+    # Attach the Router to ctx (so handlers can use ctx.router)
     ctx.router = Router(
         server_id=ctx.server_id,
         send_to_peer=_send_to_peer,
@@ -60,6 +71,9 @@ def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
         peers=ctx.peers,
         user_locations=ctx.user_locations,
         peer_last_seen=ctx.peer_last_seen,
+        # If you want server-side payload signing on hop frames, pass privkey:
+        # server_privkey=ctx.server_privkey,
+        server_privkey=None,
     )
     return ctx
 
@@ -67,25 +81,24 @@ def _mk_ctx(server_id: str, host: str, port: int) -> Ctx:
 # --- adapt your Part-6 handler signatures (ctx, ws, frame) -> (env, link) ---
 def adapt(ctx: Ctx, handler):
     async def _wrapped(env: dict, link: Link):
-        # env is your "frame", link.ws is the websocket
+        # env is the envelope (your "frame"); link.ws is the websocket
         await handler(ctx, link.ws, env)
     return _wrapped
 
 
 async def main():
-    # Configs (you can change these or read from env vars)
+    # Config (env vars override defaults)
     host = os.environ.get("SOCP_HOST", "0.0.0.0")
     port = int(os.environ.get("SOCP_PORT", "8765"))
-    # Generate a stable-ish UUIDv4 for this server if not set
     server_id = os.environ.get("SOCP_SERVER_ID") or str(uuid.uuid4())
 
-    # Build context + router
+    # Context + Router
     ctx = _mk_ctx(server_id, host, port)
 
-    # Transport server
+    # Transport
     server = TransportServer(host=host, port=port)
 
-    # Register handlers via adapter
+    # Handlers
     server.on(f"{T_SERVER_HELLO_PREFIX}_JOIN", adapt(ctx, handle_SERVER_HELLO_JOIN))
     server.on("SERVER_ANNOUNCE",              adapt(ctx, handle_SERVER_ANNOUNCE))
     server.on("USER_ADVERTISE",               adapt(ctx, handle_USER_ADVERTISE))
@@ -100,7 +113,7 @@ async def main():
     server.on("FILE_CHUNK",                   adapt(ctx, handle_FILE_CHUNK))
     server.on("FILE_END",                     adapt(ctx, handle_FILE_END))
 
-    # Start server + a simple heartbeat scheduler using the Router helpers
+    # Start + background heartbeat/housekeeping that reuses Router helpers
     await server.start()
     log.info("Server %s listening at ws://%s:%d", ctx.server_id, host, port)
 

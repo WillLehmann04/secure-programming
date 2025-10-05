@@ -33,7 +33,7 @@ class InMemoryTables:
         self.user_locations: dict[UserID, f"local" | ServerID] = {}
         self.seen_ids: LRU = LRU(capacity=1000)
         self.user_pubkeys: dict[str, bytes] = {}
-        self.group_members: dict[str, set[str]] = {}
+        self.group_members: dict[str, set[str]] = {}  # group_id -> set of user_ids
         self.group_keys: dict[str, bytes] = {}
 
     def attach_server(self, sid: ServerID, link: Link) -> None:

@@ -15,8 +15,8 @@ from backend.crypto.content_sig import sign_server_frame
 from backend.server.serverID import Serverid    
 from backend.server.context import Context
 from backend.routing.route import Router
-from backend.transport import TransportServer, Link, T_USER_HELLO, T_SERVER_HELLO_PREFIX, T_HEARTBEAT
-from backend.protocol_handlers import (
+from backend.routing.transport import TransportServer, Link, T_USER_HELLO, T_SERVER_HELLO_PREFIX, T_HEARTBEAT
+from backend.server.protocol_handlers import (
     handle_SERVER_HELLO_JOIN,
     handle_SERVER_ANNOUNCE,
     handle_USER_ADVERTISE,

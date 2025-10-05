@@ -9,14 +9,14 @@ import websockets
 
 from backend.server.context import Ctx
 from backend.routing import Router
-from backend.transport import (
+from backend.routing.transport import (
     TransportServer,
     Link,
     T_USER_HELLO,
     T_HEARTBEAT,
     T_SERVER_HELLO_PREFIX,
 )
-from backend.protocol_handlers import (
+from backend.server.protocol_handlers import (
     handle_SERVER_HELLO_JOIN,
     handle_SERVER_ANNOUNCE,
     handle_USER_ADVERTISE,

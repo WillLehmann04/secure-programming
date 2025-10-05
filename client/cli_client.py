@@ -18,8 +18,8 @@ from backend.crypto import (
 )
 
 from backend.crypto.rsa_oaep import oaep_encrypt, oaep_decrypt
-from backend.server.serverID import Serverid
 from backend.identifiers.tables import InMemoryTables
+from backend.crypto.rsa_key_management import generate_rsa_keypair, load_private_key, load_public_key
 
 """
 Return (user_id, privkey_pem_bytes, pubkey_pem_str)
@@ -32,6 +32,7 @@ WS_URL = os.environ.get("SOCP_WS", "ws://localhost:8765")
 OAEP_HASH_BYTES = 32  # SHA-256
 RSA_4096_KEY_BYTES = 4096 // 8  # 512
 OAEP_MAX_PLAINTEXT = RSA_4096_KEY_BYTES - 2 * OAEP_HASH_BYTES - 2  # 446 bytes
+DEFAULT_CFG_PATH = os.path.join(os.path.dirname(__file__), "client.json")
 
 #client side state
 _pending: dict[str, asyncio.Future] = {}   # req_id
@@ -488,8 +489,30 @@ async def main_loop(cfg_path: str):
         listener_task.cancel()
         await ws.close()
 
+
+from backend.crypto.rsa_key_management import generate_rsa_keypair
+from backend.crypto.base64url import base64url_encode
+
+def ensure_client_config(cfg_path: str):
+    if os.path.exists(cfg_path):
+        return
+    user_id = str(uuid.uuid4())
+    privkey_pem, pubkey_pem = generate_rsa_keypair()
+    config = {
+        "user_id": user_id,
+        "pubkey_pem": pubkey_pem.decode("utf-8"),
+        "privkey_pem_b64": base64url_encode(privkey_pem),
+        "server_id": "",
+    }
+    Path(cfg_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+    print(f"Generated new client config at {cfg_path}")
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("usage: cli_client.py <client_config.json>")
-        sys.exit(1)
-    asyncio.run(main_loop(sys.argv[1]))
+    if len(sys.argv) > 1:
+        cfg_path = sys.argv[1]
+    else:
+        cfg_path = DEFAULT_CFG_PATH
+    ensure_client_config(cfg_path)
+    asyncio.run(main_loop(cfg_path))

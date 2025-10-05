@@ -3,6 +3,8 @@ import json
 import sys
 import websockets
 
+from client.commands_all import cmd_all
+
 from .constants import WS_URL
 from .config import load_client_cfg
 from .envelopes import user_hello, user_advertise, user_remove
@@ -42,7 +44,7 @@ async def main_loop(cfg_path: str):
                 await cmd_tell(ws, user_id, privkey_pem, to, text, transport.tables)
             elif line.startswith("/all "):
                 text = line[len("/all "):]
-                await cmd_channel(ws, user_id, privkey_pem, "all", text)
+                await cmd_all(ws, user_id, privkey_pem, text, transport.tables)
             elif line == "/quit":
                 await ws.send(json.dumps(user_remove(user_id, privkey_pem)))
                 await ws.close()
@@ -50,8 +52,9 @@ async def main_loop(cfg_path: str):
             else:
                 print("unknown command", line)
 
-        listener_task.cancel()
-        await ws.close()
+
+                listener_task.cancel()
+                await ws.close()
 
 
 if __name__ == "__main__":

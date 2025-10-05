@@ -1,0 +1,6 @@
+import os
+
+WS_URL = os.environ.get("SOCP_WS", "ws://localhost:8765")
+OAEP_HASH_BYTES = 32 # SHA-256
+RSA_4096_KEY_BYTES = 4096 // 8 # 512
+OAEP_MAX_PLAINTEXT = RSA_4096_KEY_BYTES - 2 * OAEP_HASH_BYTES - 2 # 446 bytes

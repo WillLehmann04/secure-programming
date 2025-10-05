@@ -1,107 +1,90 @@
 # backend/envelope.py
+"""
+Envelope helpers
+----------------
+Wraps payloads in a stable JSON shape and (optionally) signs them.
+We always sign the *payload* only (per our protocol), then attach
+`sig` and `alg` alongside the payload in the outer frame.
+"""
 
 from __future__ import annotations
-
+import time
 import logging
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
-# --- Team crypto modules (names as your teammates defined) ---
+# Prefer our own crypto helpers if they exist.
 try:
-    # stabilise_json(obj) -> bytes
-    from backend.crypto import json_format as jf
+    from backend.crypto import json_format as json_mod         # stabilise_json(obj)->bytes
 except Exception:
-    jf = None
+    json_mod = None
 
 try:
-    # base64url_encode(bytes)->str , base64url_decode(str)->bytes
-    from backend.crypto import base64url as b64u
+    from backend.crypto import base64url as b64u_mod           # base64url_encode/ decode
 except Exception:
-    b64u = None
+    b64u_mod = None
 
-# Optional future module; if added later we’ll prefer it.
 try:
-    from backend.crypto import rsa_pss as team_pss
+    from backend.crypto import rsa_pss as team_pss             # team-provided PSS impl
 except Exception:
     team_pss = None
 
-# --- Fallback libraries (we only use these if team_pss is not present) ---
+# Cryptography fallback if our team modules aren’t complete.
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding as _padding
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
 
-# -----------------------------
-# Canonicalize payload for signing (team function first)
-# -----------------------------
+# canonical JSON 
 
-def _get_canonical_bytes(payload: dict) -> bytes:
-    """
-    Serialize payload deterministically for signing.
-    Prefer backend.crypto.json_format.stabilise_json.
-    """
-    if jf and hasattr(jf, "stabilise_json"):
-        return jf.stabilise_json(payload)
-    # ultra-safe fallback: minimal sortable JSON (bytes)
+def _canon_bytes(obj: dict) -> bytes:
+    """Deterministic JSON -> bytes (team function first, otherwise a safe fallback)."""
+    if json_mod and hasattr(json_mod, "stabilise_json"):
+        return json_mod.stabilise_json(obj)
     import json
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-# -----------------------------
-# Base64url helpers (team functions)
-# -----------------------------
+# base64url helpers
 
-def _get_b64u_helpers() -> Tuple[Callable[[bytes], str], Callable[[str], bytes]]:
+def _b64_helpers() -> Tuple[Callable[[bytes], str], Callable[[str], bytes]]:
+    """Return (encode, decode) — prefer teammate module if available."""
+    if b64u_mod and hasattr(b64u_mod, "base64url_encode"):
+        return b64u_mod.base64url_encode, b64u_mod.base64url_decode
 
-    """
-    Return (encode_fn, decode_fn) that match our base64url module.
-    """
-    if not b64u or not hasattr(b64u, "base64url_encode") or not hasattr(b64u, "base64url_decode"):
-        import base64
+    # tiny local fallback
+    import base64
 
-        def _enc(d: bytes) -> str:
-            return base64.urlsafe_b64encode(d).rstrip(b"=").decode("ascii")
+    def enc(b: bytes) -> str:
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
 
-        def _dec(s: str) -> bytes:
-            b = s.encode("ascii")
-            pad = (-len(b)) % 4
-            if pad:
-                b += b"=" * pad
-            return base64.urlsafe_b64decode(b)
+    def dec(s: str) -> bytes:
+        raw = s.encode()
+        raw += b"=" * ((4 - len(raw) % 4) % 4)  # pad to multiple of 4
+        return base64.urlsafe_b64decode(raw)
 
-        return _enc, _dec
-
-    return b64u.base64url_encode, b64u.base64url_decode
+    return enc, dec
 
 
-# -----------------------------
 # RSA-PSS helpers
-# -----------------------------
 
-def _get_pss_funcs() -> Tuple[Callable[[bytes, RSAPrivateKey], bytes],
-                               Callable[[RSAPublicKey, bytes, bytes], bool]]:
-    
-
+def _pss_funcs():
+    """
+    Return (sign, verify) functions.
+    If the team module exists we’ll use that; otherwise fall back to cryptography.
+    """
     if team_pss:
-        cand = [
-            ("sign", "verify"),
-            ("pss_sign", "pss_verify"),
-        ]
-        for sname, vname in cand:
+        for sname, vname in (("sign", "verify"), ("pss_sign", "pss_verify")):
             s = getattr(team_pss, sname, None)
             v = getattr(team_pss, vname, None)
             if callable(s) and callable(v):
-                def _sign(priv: RSAPrivateKey, msg: bytes) -> bytes:
-                    return s(priv, msg)  # type: ignore[misc]
+                return s, v
 
-                def _verify(pub: RSAPublicKey, msg: bytes, sig: bytes) -> bool:
-                    return bool(v(pub, msg, sig))  # type: ignore[misc]
-
-                return _sign, _verify
-
+    # fallback implementation
     def _sign(priv: RSAPrivateKey, msg: bytes) -> bytes:
         return priv.sign(
             msg,
-            _padding.PSS(mgf=_padding.MGF1(hashes.SHA256()), salt_length=_padding.PSS.MAX_LENGTH),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH),
             hashes.SHA256(),
         )
 
@@ -110,7 +93,8 @@ def _get_pss_funcs() -> Tuple[Callable[[bytes, RSAPrivateKey], bytes],
             pub.verify(
                 sig,
                 msg,
-                _padding.PSS(mgf=_padding.MGF1(hashes.SHA256()), salt_length=_padding.PSS.MAX_LENGTH),
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
+                            salt_length=padding.PSS.MAX_LENGTH),
                 hashes.SHA256(),
             )
             return True
@@ -120,66 +104,47 @@ def _get_pss_funcs() -> Tuple[Callable[[bytes, RSAPrivateKey], bytes],
     return _sign, _verify
 
 
-# -----------------------------
-# Public API: sign/verify envelope
-# -----------------------------
+#  public API
 
 def sign_payload(payload: dict, privkey: RSAPrivateKey) -> dict:
+    """Return {"payload": payload, "sig": <b64url>, "alg": "PS256"}."""
+    enc, _ = _b64_helpers()
+    sign, _verify = _pss_funcs()
+    msg = _canon_bytes(payload)
+    sig_b = sign(privkey, msg)
+    return {"payload": payload, "sig": enc(sig_b), "alg": "PS256"}
 
+
+def make_verifier(pub_lookup: Callable[[str], RSAPublicKey]):
     """
-    Returns {"payload": payload, "sig": <b64url>, "alg": "PS256"}
+    Build a verifier function that:
+      - pulls the sender id out of env["from"]
+      - fetches that sender’s public key
+      - verifies the signature over the canonical payload bytes
     """
-    enc, _dec = _get_b64u_helpers()
-    msg = _get_canonical_bytes(payload)
+    _, dec = _b64_helpers()
+    _sign, verify = _pss_funcs()
 
-    raw_sign, _raw_verify = _get_pss_funcs()
-    sig_bytes = raw_sign(privkey, msg)
-    sig_b64u = enc(sig_bytes)
-
-    return {"payload": payload, "sig": sig_b64u, "alg": "PS256"}
-
-
-def make_verifier(pubkey_lookup: Callable[[str], RSAPublicKey]) -> Callable[[dict], bool]:
-
-    """
-    Returns a verifier(env) that:
-      * extracts sender id from env["from"]
-      * gets the sender's public key via pubkey_lookup(sender_id)
-      * verifies the signature over canonical(payload)
-    """
-    _, dec = _get_b64u_helpers()
-    _raw_sign, raw_verify = _get_pss_funcs()
-
-    def verifier(env: dict) -> bool:
+    def _verify_env(env: dict) -> bool:
         try:
-            sender_id = env["from"]
+            sender = env["from"]
             payload = env["payload"]
-            sig_b64 = env["sig"]
-            pub = pubkey_lookup(sender_id)
-
-            msg = _get_canonical_bytes(payload)
-            sig_bytes = dec(sig_b64)
-            return raw_verify(pub, msg, sig_bytes)
+            sig = dec(env["sig"])
+            pub = pub_lookup(sender)
+            return verify(pub, _canon_bytes(payload), sig)
         except Exception as e:
-            logging.warning("envelope verify failed: %s", e)
+            logging.warning("envelope verify failed for %r: %s", env.get("from"), e)
             return False
 
-    return verifier
+    return _verify_env
 
 
-def is_valid_envelope(env: dict, pubkey_lookup: Callable[[str], RSAPublicKey]) -> bool:
+def is_valid_envelope(env: dict, pub_lookup: Callable[[str], RSAPublicKey]) -> bool:
+    """Handy one-liner for ‘does this envelope verify?’."""
+    return make_verifier(pub_lookup)(env)
 
-    """
-    Convenience wrapper for quick checks.
-    """
-    return make_verifier(pubkey_lookup)(env)
 
-# -----------------------------
-# Helpers used across transport/routing
-# -----------------------------
-
-from typing import Optional
-import time
+# helpers used by transport / routing
 
 def make_envelope(
     typ: str,
@@ -190,29 +155,20 @@ def make_envelope(
     sign_with: Optional[RSAPrivateKey] = None,
     ts: Optional[int] = None,
 ) -> dict:
-    """
-    Building a canonical envelope and (optionally) sign it with RSA-PSS (PS256).
-    This is the single entry point all code should use to create frames.
-    """
-    env = {
+    """Build the standard frame. If sign_with is provided, sign the payload."""
+    frame = {
         "type": typ,
         "from": from_id,
         "to": to,
         "ts": int(ts if ts is not None else time.time() * 1000),
         "payload": payload,
     }
-    if sign_with is not None:
-        sig_block = sign_payload(payload, sign_with)
-        env["sig"] = sig_block["sig"]
-        env["alg"] = sig_block["alg"]
-    return env
+    if sign_with:
+        sig = sign_payload(payload, sign_with)
+        frame["sig"], frame["alg"] = sig["sig"], sig["alg"]
+    return frame
 
 
-def verify_envelope_signature(env: dict, pubkey_lookup: Callable[[str], RSAPublicKey]) -> bool:
-    """
-    Return True iff env['sig'] verifies over canonical(payload) for sender's pubkey.
-    Safe to call for HELLO frames that may be unsigned (returns False if missing sig).
-    """
-    if "sig" not in env:
-        return False
-    return is_valid_envelope(env, pubkey_lookup)
+def verify_envelope_signature(env: dict, pub_lookup: Callable[[str], RSAPublicKey]) -> bool:
+    """True iff env contains a valid signature for its payload."""
+    return "sig" in env and is_valid_envelope(env, pub_lookup)

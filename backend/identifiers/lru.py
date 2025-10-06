@@ -38,6 +38,7 @@ class LRU():
         if key in self.orderedDictionary:
             self.orderedDictionary.move_to_end(key)
             return
+        
         self.orderedDictionary[key] = None
         if len(self.orderedDictionary) > self.capacity:
             self.orderedDictionary.popitem(last=False)

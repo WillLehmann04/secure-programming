@@ -1,4 +1,3 @@
-# backend/tests_smoketest.py
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +30,7 @@ from backend.server.protocol_handlers import (
     handle_FILE_END,
 )
 
-# ---------- tiny adapter so transport can call our part-6 handlers ----------
+# ==== tiny adapter so transport can call our part-6 handlers ====
 def adapt(ctx: Ctx, handler):
     async def _wrapped(env: dict, link: Link):
         await handler(ctx, link.ws, env)
@@ -65,7 +64,7 @@ async def start_stack(host="127.0.0.1", port=8765) -> tuple[Ctx, TransportServer
 
     server = TransportServer(host=host, port=port)
 
-    # Part-5 (server<->server) + Part-6 (user<->server) handlers
+    # (server<->server) + (user<->server) handlers
     server.on(f"{T_SERVER_HELLO_PREFIX}_JOIN", adapt(ctx, handle_SERVER_HELLO_JOIN))
     server.on("SERVER_ANNOUNCE",              adapt(ctx, handle_SERVER_ANNOUNCE))
     server.on("USER_ADVERTISE",               adapt(ctx, handle_USER_ADVERTISE))
@@ -84,7 +83,7 @@ async def start_stack(host="127.0.0.1", port=8765) -> tuple[Ctx, TransportServer
     return ctx, server
 
 
-# ---------- minimal client helpers ----------
+# ==== minimal client helpers ====
 def frame(ftype, frm, to, payload):
     return {
         "type": ftype,

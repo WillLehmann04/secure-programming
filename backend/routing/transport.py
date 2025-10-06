@@ -24,7 +24,7 @@ import websockets
 from websockets.server import WebSocketServerProtocol
 from backend.crypto.content_sig import sign_server_frame
 
-# ------------ Protocol constants (keep aligned with the class spec) ------------
+# ==== Protocol constants (aligned with our spec) ====
 
 T_SERVER_HELLO_PREFIX = "SERVER_HELLO"    # e.g. SERVER_HELLO_JOIN
 T_USER_HELLO          = "USER_HELLO"
@@ -38,12 +38,12 @@ ERR_INVALID_SIG    = "INVALID_SIG"
 ERR_BAD_KEY        = "BAD_KEY"
 ERR_TIMEOUT        = "TIMEOUT"
 ERR_UNKNOWN_TYPE   = "UNKNOWN_TYPE"
-ERR_NAME_IN_USE    = "NAME_IN_USE"
+ERR_NAME_IN_USE    = "NAME_IN_USE" #SOCP 5.1
 
-# ------------ Types ------------------------------------------------------------
+# ==== Types ====
 
 Handler = Callable[[dict, "Link"], Awaitable[None]]
-EnvelopeVerifier = Callable[[dict, "Link"], bool]   # Part 4 pluggable policy
+EnvelopeVerifier = Callable[[dict, "Link"], bool]
 
 
 @dataclass
@@ -52,8 +52,8 @@ class Link:
     """A connected peer (user or server)."""
 
     ws: WebSocketServerProtocol
-    role: str                 # "user" | "server"
-    peer_id: str              # UUIDv4 string
+    role: str # "user" | "server"
+    peer_id: str # UUIDv4 string
     connected_at: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
 
@@ -70,12 +70,11 @@ class State:
     user_locations: Dict[str, str] = field(default_factory=dict)    # user_id -> "local" | server_id
 
 
-# ------------ Envelope structure (Part 3 only; Part 4 will add signature rules) -
+# ==== Envelope structure ====
 
 def _is_valid_envelope_structure(env: dict) -> Tuple[bool, str]:
 
     """
-    Minimal structure check for the outer envelope (no signature policy here).
     Required keys: type, from, to, ts, payload
     """
     must = ("type", "from", "to", "ts", "payload")
@@ -102,7 +101,7 @@ def _is_uuid4(s: str) -> bool:
         return False
 
 
-# ------------------------------ Transport Server --------------------------------
+# ==== Transport Server ====
 
 class TransportServer:
 
@@ -140,7 +139,7 @@ class TransportServer:
         self.log = log or logging.getLogger("backend.transport")
         self.log.setLevel(logging.INFO)
 
-    # ---- public API -----------------------------------------------------------
+    # ==== public API ====
 
     def on(self, msg_type: str, handler: Handler) -> None:
 
@@ -174,7 +173,7 @@ class TransportServer:
         self.state.local_users.clear()
         self.state.servers.clear()
 
-    # ---- connection lifecycle -------------------------------------------------
+    # ==== connection lifecycle ====
 
     async def _conn_handler(self, ws: WebSocketServerProtocol) -> None:
 
@@ -206,8 +205,24 @@ class TransportServer:
                 self.log.info("server connected: %s", link.tag())
 
             elif msg_type == T_USER_HELLO:
-                link = Link(ws=ws, role="user", peer_id=peer_id)
-                self.log.info("user hello received: %s", link.tag())
+                user_id = peer_id
+
+                # Enforce UUID v4 (SOCP 5.1)
+                if not _is_uuid4(user_id):
+                    await self._send_error(ws, "", ERR_BAD_KEY, "user_id:not_uuid4")
+                    return
+
+                # Check if user ID already exists (first local then known remote)
+                if user_id in self.state.local_users or user_id in self.state.user_locations:
+                    await self._send_error(ws, user_id, ERR_NAME_IN_USE, "user_id_in_use")
+                    return
+
+                # Register locally
+                link = Link(ws=ws, role="user", peer_id=user_id)
+                self.state.local_users[user_id] = link
+                self.state.user_locations[user_id] = "local"
+
+                self.log.info("user connected: %s", link.tag())
 
             else:
                 await self._send_error(ws, "", ERR_UNKNOWN_TYPE, "first frame must be HELLO")
@@ -292,7 +307,7 @@ class TransportServer:
             self.log.exception("handler error for %s: %s", env["type"], e)
             await self._send_error(link.ws, link.peer_id, ERR_TIMEOUT, f"handler_exception:{env['type']}")
 
-    # ---- optional app-level heartbeat (WS ping/pong still active) -------------
+    # ==== another app-level heartbeat ====
 
     async def _heartbeat_loop(self) -> None:
         try:
@@ -318,7 +333,7 @@ class TransportServer:
         except asyncio.CancelledError:
             return
 
-    # ---- error helper ---------------------------------------------------------
+    # ==== error helper function ====
 
     async def _send_error(self, ws: WebSocketServerProtocol, to_id: str, code: str, detail: str) -> None:
         env = {

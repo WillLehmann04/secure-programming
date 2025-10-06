@@ -26,5 +26,5 @@ def build_user_hello(server_id: str, user_id: str, pubkey_pem: str, privatekey_p
         "ts": now_ts(),
         "payload": payload,
         "sig": signed_transport_sig(payload, privatekey_pem),
-        "alg": "PS256",  # <-- REQUIRED BY SOCP
+        "alg": "PS256",  # <-- REQUIRED BY OUR SOCP
     }

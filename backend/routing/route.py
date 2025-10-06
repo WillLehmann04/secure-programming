@@ -10,20 +10,20 @@
         - This module implements a message routing system for a distributed server architecture.
 '''
 
-
 import json
 import time
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Set
 from collections import deque, defaultdict
+
 from dataclasses import dataclass, field
 
 def _seen_key(frame: dict) -> str:
-    # ts|from|to|sha256(canonical(payload)) — simple & stable
+    # ts|from|to|sha256(canonical(payload))
     import hashlib, json as _json
     ts = str(frame.get("ts", 0))
     f  = frame.get("from", "")
     t  = frame.get("to", "")
-    # canonicalise for stability across nodes
+    # canonicalising for stability across nodes
     b  = _json.dumps(frame.get("payload", {}), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     h  = hashlib.sha256(b).hexdigest()
     return f"{ts}|{f}|{t}|{h}"
@@ -44,9 +44,9 @@ class Router:
 
     # retry buffer for unknown locations
     _pending_by_user: Dict[str, Deque[dict]] = field(default_factory=lambda: defaultdict(deque))
-    _pending_max_per_user: int = 100
+    _max_user: int = 100
 
-    # ---- DEDUPE ----
+    # ==== DEDUPE ====
     def already_seen(self, frame: dict) -> bool:
         k = _seen_key(frame)
         if k in self._seen:
@@ -61,7 +61,7 @@ class Router:
             old = self._seen_q.popleft()
             self._seen.discard(old)
 
-    # ---- PRESENCE ----
+    # ==== PRESENCE ====
     def record_presence(self, user: str, location: str) -> None:
         self.user_locations[user] = location
         q = self._pending_by_user.get(user)
@@ -72,7 +72,7 @@ class Router:
             import asyncio
             asyncio.create_task(self._route_now(user, frame, allow_queue=False))
 
-    # ---- ROUTING ----
+    # ==== ROUTING ====
     async def route_to_user(self, target: str, frame: dict) -> None:
         await self._route_now(target, frame, allow_queue=True)
 
@@ -107,11 +107,11 @@ class Router:
         # unknown
         if allow_queue:
             q = self._pending_by_user[target]
-            if len(q) >= self._pending_max_per_user:
+            if len(q) >= self._max_user:
                 q.popleft()
             q.append(frame)
 
-    # ---- HEARTBEAT / REAP ----
+    # ==== HEARTBEAT / REAP ====
     async def broadcast_heartbeat(self) -> None:
         hb = {"type":"HEARTBEAT","from":self.server_id,"to":"*","ts":int(time.time()*1000),"payload":{}}
         import asyncio

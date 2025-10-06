@@ -20,9 +20,20 @@
 '''
 
 # ========== Imports ========== 
-from .identifiers import ServerID, UserID, Link
 from .lru import LRU
+from dataclasses import dataclass
 
+ServerID = str
+UserID = str
+
+@dataclass
+class Link:
+    peer_id: str 
+    send: callable 
+    closed: bool = False 
+
+    def close(self):
+        self.closed = True
 
 # ========== InMemory Class ========== 
 class InMemoryTables:

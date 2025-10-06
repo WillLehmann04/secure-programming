@@ -1,46 +1,29 @@
-# backend/protocol_handlers.py
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (Axxxxxxxx)
+        
+    Description:
+        - This module contains protocol handlers for various message types.
+        - It handles both server-to-server and user-to-server messages.
+        - It includes signature verification, deduplication, and routing logic.
+'''
+
+
 import json, hashlib, time
 from collections import deque
 from backend.crypto.content_sig import sign_server_frame, verify_server_frame
 from backend.crypto.json_format import stabilise_json
-
-
 from backend.crypto.rsa_pss import rsa_verify_pss
 from backend.crypto.json_format import stabilise_json
 from backend.crypto import base64url_decode
 from backend.crypto.rsa_key_management import load_public_key
 
-async def send_to_all_peers(ctx, frame, exclude_ws=None):
-    for sid, peer_ws in ctx.peers.items():
-        if exclude_ws is not None and peer_ws is exclude_ws:
-            continue
-        await peer_ws.send(json.dumps(frame))
-    
-
-# ---------- utilities ----------
-def make_seen_key(frame: dict) -> str:
-    ts = str(frame.get("ts", 0))
-    f  = frame.get("from", "")
-    t  = frame.get("to", "")
-    payload_bytes = stabilise_json(frame.get("payload", {}))
-    h = hashlib.sha256(payload_bytes).hexdigest()
-    return f"{ts}|{f}|{t}|{h}"
-
-DEDUP_MAX = 10_000
-
-def remember_seen(ctx, key: str) -> bool:
-    if key in ctx.seen_ids: return True
-    ctx.seen_ids.add(key)
-    ctx.seen_queue.append(key)  # bounded by maxlen
-    return False
-
-async def send_error(ws, code: str, detail: str = ""):
-    try:
-        await ws.send(json.dumps({"type":"ERROR","payload":{"code":code,"detail":detail}}))
-    except Exception:
-        pass  # Ignore errors if the websocket is already closed
+from .peer_comm_utilities import send_to_all_peers, make_seen_key, remember_seen, send_error
 
 # ---------- Server <-> Server ----------
+
 async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
     peer_id = frame["from"]
     if peer_id in ctx.peers:
@@ -84,7 +67,6 @@ async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
         except Exception:
             pass
 
-    
 
 async def handle_SERVER_ANNOUNCE(ctx, ws, frame):
     peer_id = frame.get("from")
@@ -99,43 +81,55 @@ async def handle_SERVER_ANNOUNCE(ctx, ws, frame):
         ctx.server_addrs[sid] = (host, int(port))
         ctx.peer_last_seen[sid] = time.time()
 
+# ---------- User Advertisement ----------
+
 async def handle_USER_ADVERTISE(ctx, ws, frame):
+    """Handle a new or relayed USER_ADVERTISE."""
     payload = frame["payload"]
     sig_b64 = frame.get("sig", "")
     user_id = payload.get("user_id")
     pubkey_pem = payload.get("pubkey")
+
     if not (user_id and pubkey_pem and sig_b64):
         await send_error(ws, "BAD_KEY", "missing fields")
         return
+    
     payload_bytes = stabilise_json(payload)
     sig = base64url_decode(sig_b64)
+
     if not rsa_verify_pss(pubkey_pem, payload_bytes, sig):
         await send_error(ws, "INVALID_SIG", "bad signature")
         return
-    
-    await send_to_all_peers(ctx, frame)
 
-    # Store the user's public key for later verification
+    key = make_seen_key(frame)
+    if remember_seen(ctx, key):
+        return  # drop duplicate
+
+    # Store the user's public key and envelope
     ctx.user_pubkeys[user_id] = pubkey_pem
     ctx.user_advertise_envelopes[user_id] = frame
 
     # Register the user as local and record their presence
     ctx.local_users[user_id] = ws
     ctx.router.record_presence(user_id, "local")
-    await ws.send(json.dumps({"type": "ACK", "payload": {"msg_ref": "USER_ADVERTISE"}}))
+    await ws.send(json.dumps({
+        "type": "ACK",
+        "payload": {
+            "msg_ref": "USER_ADVERTISE",
+            "from": frame.get("from"),
+            "to": frame.get("to"),
+            "ts": frame.get("ts"),
+            "msg_type": frame.get("type")
+        }
+    }))
 
+    # Fan-out to all local users except the sender
     for uid, uws in ctx.local_users.items():
         if uws != ws:
             await uws.send(json.dumps(frame))
-    
-    await send_to_all_peers(ctx, frame)
 
-    for sid, pws in list(ctx.peers.items()):
-        try:
-            await pws.send(json.dumps(frame))
-        except Exception:
-            # Remove dead peer
-            ctx.peers.pop(sid, None)
+    # Relay to all peers except the sender
+    await send_to_all_peers(ctx, frame, exclude_ws=ws)
 
 
 async def handle_MSG_PUBLIC_CHANNEL(ctx, ws, frame):

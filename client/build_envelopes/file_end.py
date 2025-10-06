@@ -10,31 +10,30 @@
         - This module builds FILE_END messages for sending file transfer completion notifications between clients and servers.
 '''
 
-from client.helpers.small_utils import now_ts, b64u, base64url_encode, stabilise_json, chunk_plaintext, signed_transport_sig, content_sig_dm, rsa_sign_pss, sha256_bytes
-import json
-
-def build_file_end(manifest_summary: dict, frm: str, to: str | None, ts: str, privkey_pem: bytes, pubkey_pem: str) -> dict:
-    summary_bytes = json.dumps(manifest_summary, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    d = sha256_bytes(summary_bytes + frm.encode() + (to or "").encode() + str(ts).encode())
-    content_sig = base64url_encode(rsa_sign_pss(privkey_pem, d))
+from client.helpers.small_utils import b64u, stabilise_json, rsa_sign_pss
+import hashlib
+def build_file_end(file_id, frm, to, ts, privkey_pem=None):
+    to_str = to if to is not None else ""
     payload = {
-        "summary": manifest_summary,
-        "from": frm,
-        "to": to,
-        "ts": ts,
-        "pubkey": pubkey_pem,
-        "content_sig": content_sig,
+        "file_id": file_id
     }
-    payload_bytes = stabilise_json(payload)
-    sig = rsa_sign_pss(privkey_pem, payload_bytes)
-    sig_b64 = base64url_encode(sig)
-    return {
+    # Content signature: hash b"" + frm + to + ts
+    d = hashlib.sha256(b"" + frm.encode() + to_str.encode() + str(ts).encode()).digest()
+    content_sig = b64u(rsa_sign_pss(privkey_pem, d)) if privkey_pem else ""
+    payload["content_sig"] = content_sig
+
+    env = {
         "type": "FILE_END",
         "from": frm,
-        "to": to,
+        "to": to_str,
         "ts": ts,
         "payload": payload,
-        "sig": sig_b64,
-        "alg": "PS256",
     }
-    
+    # Envelope signature: sign canonical JSON of payload
+    if privkey_pem:
+        payload_bytes_for_env_sig = stabilise_json(payload)
+        sig = rsa_sign_pss(privkey_pem, payload_bytes_for_env_sig)
+        env["sig"] = b64u(sig)
+    else:
+        env["sig"] = ""
+    return env

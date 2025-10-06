@@ -12,7 +12,8 @@
 '''
 
 from backend.crypto import rsa_verify_pss, base64url_decode, stabilise_json, load_public_key
-from backend.server.peer_comm_utilities import send_error, verify_server_frame, now_ts
+from backend.server.peer_comm_utilities import send_error, now_ts
+
 import json, time
 
 async def handle_USER_HELLO(ctx, ws, frame):

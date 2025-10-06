@@ -1,4 +1,17 @@
 '''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module provides RSA OAEP encryption and decryption functionality,
+          including handling large data by chunking, and calculating maximum plaintext length.
+'''
+
+'''
     Created: 17/09/2025 @ 4:32pm
     RSA Key functionality
 

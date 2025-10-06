@@ -1,3 +1,17 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module provides utility functions for peer server communication,
+          including sending messages to all peers, generating deduplication keys,
+          and managing user sessions.
+'''
+
 import json
 from backend.crypto.json_format import stabilise_json
 import hashlib

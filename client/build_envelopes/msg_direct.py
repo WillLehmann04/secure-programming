@@ -1,3 +1,15 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module builds MSG_DIRECT messages for sending direct messages between clients.
+'''
+
 from backend.crypto import rsa_sign_pss, base64url_encode, stabilise_json
 
 ''' MSG_DIRECT '''

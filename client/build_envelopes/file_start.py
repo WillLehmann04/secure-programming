@@ -1,5 +1,17 @@
-from client.helpers.small_utils import now_ts, b64u, base64url_encode, stabilise_json, chunk_plaintext, signed_transport_sig, content_sig_dm, rsa_sign_pss, sha256_bytes
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module builds FILE_START messages for initiating file transfers between clients and servers.
+'''
 
+from client.helpers.small_utils import now_ts, b64u, base64url_encode, stabilise_json, chunk_plaintext, signed_transport_sig, content_sig_dm, rsa_sign_pss, sha256_bytes
+import json
 
 def build_file_start(manifest: dict, frm: str, to: str | None, ts: str, privkey_pem: bytes, pubkey_pem: str) -> dict:
     manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")

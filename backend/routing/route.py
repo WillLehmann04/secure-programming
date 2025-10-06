@@ -1,4 +1,16 @@
-# backend/routing/routing.py
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module implements a message routing system for a distributed server architecture.
+'''
+
+
 import json
 import time
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Set

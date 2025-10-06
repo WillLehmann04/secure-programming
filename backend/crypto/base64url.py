@@ -1,4 +1,18 @@
 '''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module provides cryptographic utilities including base64url encoding/decoding,
+          JSON stabilisation, RSA key management, RSA encryption/decryption, and RSA signing/verification.
+        - It consolidates various cryptographic functions for easy import and use across the backend.
+'''
+
+'''
     Created: 17/09/2025 @ 1:37pm
     BASE64URL functionality
 

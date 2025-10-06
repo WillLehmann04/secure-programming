@@ -2,13 +2,13 @@
     Group: Group 2
     Members:
         - William Lehmann (A1889855)
-        - Edward Chipperfield (Axxxxxxxx)
-
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
         
     Description:
-        - This is the main entry point for running a server instance.
-        - It sets up the server context, routing, and protocol handlers.
-        - It also manages peer connections and heartbeats.
+        - This is the main entry point for running the server mesh.
+          It sets up the server, loads or generates RSA keys, and initialises the context.
 '''
 
 # ========== Imports ==========

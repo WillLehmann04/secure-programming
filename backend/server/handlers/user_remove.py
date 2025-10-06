@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module handles USER_REMOVE messages from users,  removing the user from the server's records
+          and notifying other connected servers of the removal.
+'''
+
 from backend.crypto import rsa_verify_pss, base64url_decode, stabilise_json
 import json
 from backend.server.peer_comm_utilities import send_error

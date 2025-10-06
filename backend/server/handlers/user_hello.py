@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module handles USER_HELLO messages from users,
+          registering the user and sending known USER_ADVERTISEs.
+'''
+
 from backend.crypto import rsa_verify_pss, base64url_decode, stabilise_json, load_public_key
 from backend.server.peer_comm_utilities import send_error, verify_server_frame, now_ts
 import json, time

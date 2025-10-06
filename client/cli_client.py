@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This is the main entry point for running the client CLI.
+          It handles user input, connects to the server, and manages sending and receiving messages.
+'''
+
 import asyncio
 import json
 import os

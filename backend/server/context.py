@@ -1,4 +1,16 @@
-# backend/context.py
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module defines the Context class, which maintains the server's state,
+          including connected peers, user sessions, public keys, and message deduplication.
+'''
+
 import json
 from collections import deque
 

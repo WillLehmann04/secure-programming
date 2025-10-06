@@ -1,3 +1,15 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module builds MSG_PUBLIC_CHANNEL messages for sending public messages to channels.
+'''
+
 from client.helpers.small_utils import base64url_encode, stabilise_json, rsa_sign_pss
 
 def build_msg_public(nonce_b64u: str, ct_b64u: str, frm: str, ts: int, content_sig_b64u: str, privkey_pem: bytes, channel_id: str) -> dict:

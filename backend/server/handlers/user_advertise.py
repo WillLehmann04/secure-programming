@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module handles USER_ADVERTISE messages from users,   
+          verifying signatures, storing public keys, and propagating the information.
+'''
+
 from backend.crypto import stabilise_json, base64url_decode, rsa_verify_pss
 from backend.server.peer_comm_utilities import send_to_all_peers, make_seen_key, remember_seen, send_error
 import json

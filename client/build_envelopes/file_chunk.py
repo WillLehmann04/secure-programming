@@ -1,3 +1,15 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module builds FILE_CHUNK messages for sending file chunks between clients and servers.
+'''
+
 from client.helpers.small_utils import now_ts, b64u, base64url_encode, stabilise_json, chunk_plaintext, signed_transport_sig, content_sig_dm, rsa_sign_pss, sha256_bytes
 import json
 from backend.crypto import base64url_decode
@@ -6,7 +18,7 @@ def build_file_chunk(index: int, chunk_b64u: str, frm: str, to: str | None, ts: 
     ciphertext_bytes = base64url_decode(chunk_b64u)
     d = sha256_bytes(ciphertext_bytes + frm.encode() + (to or "").encode() + str(ts).encode())
     content_sig = base64url_encode(rsa_sign_pss(privkey_pem, d))
-    
+
     payload = {
         "index": index,
         "ciphertext": chunk_b64u,

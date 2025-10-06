@@ -1,4 +1,16 @@
 '''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module provides a simple LRU cache implementation.
+'''
+
+'''
     Created: 23/09/2025 @ 6:37pm
     LRU Implementation
 

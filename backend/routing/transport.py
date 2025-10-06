@@ -1,15 +1,14 @@
-# backend/transport.py
-
-"""
-SOCP — Transport (WebSocket) layer
-
-- One WebSocket listener (single port) for Users and Servers.
-- FIRST inbound frame MUST be a HELLO (USER_HELLO or SERVER_HELLO_*).
-- Exactly ONE JSON object per WebSocket text frame (no newline framing).
-- Normal close (1000); optional app-level HEARTBEAT (WS ping/pong still active).
-- Pluggable dispatch table (.on) and a verify_envelope callback for Envelope.
-
-"""
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module implements a WebSocket-based transport server that handles connections from both users and other servers.
+'''
 
 from __future__ import annotations
 

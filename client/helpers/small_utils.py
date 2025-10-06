@@ -1,3 +1,17 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module provides small utility functions for cryptographic operations,
+          including timestamp generation, SHA-256 hashing, chunking plaintext,
+          and base64 URL encoding.
+'''
+
 import hashlib
 import time
 from typing import Tuple, List

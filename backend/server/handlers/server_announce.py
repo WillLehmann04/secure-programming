@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module handles SERVER_ANNOUNCE messages from peer servers,
+          updating the server address list and last seen timestamps.
+'''
+
 import json
 from backend.server.peer_comm_utilities import send_error
 from backend.crypto.content_sig import sign_server_frame, verify_server_frame

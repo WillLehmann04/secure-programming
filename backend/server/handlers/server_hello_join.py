@@ -1,3 +1,16 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module handles SERVER_HELLO_JOIN messages from peer servers,
+          registering new peer connections and sharing known user advertisements.
+'''
+
 from backend.server.peer_comm_utilities import send_to_all_peers, make_seen_key, remember_seen, send_error, now_ts
 import json, time
 from backend.crypto.content_sig import sign_server_frame, verify_server_frame

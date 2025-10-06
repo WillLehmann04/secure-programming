@@ -1,3 +1,15 @@
+'''
+    Group: Group 2
+    Members:
+        - William Lehmann (A1889855)
+        - Edward Chipperfield (A1889447)
+        - G A Sadman (A1899867)
+        - Aditeya Sahu (A1943902)
+        
+    Description:
+        - This module implements in-memory tables for managing server and user connections
+'''
+
 # A reminder of the spec from the recent document in discord
 """
     Spec-mandated in-memory tables:

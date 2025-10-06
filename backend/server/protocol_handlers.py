@@ -53,11 +53,6 @@ async def handle_HEARTBEAT(ctx, ws, frame):
     sid = frame.get("from")
     if sid: ctx.router.note_peer_seen(sid)
 
-
-# ---------- User <-> Server ----------
-
-
-
 async def handle_FILE_START(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
 async def handle_FILE_CHUNK(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
 async def handle_FILE_END(ctx, ws, frame):    await handle_MSG_DIRECT(ctx, ws, frame)

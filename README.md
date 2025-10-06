@@ -34,7 +34,7 @@ pip install -r .\requirements.txt
 
 
 ## Server / Starting Servers
-- On start up, the server will generate a new RSA keypair and save it in `/storage`. After this, all instances of the server will use the persistance of the RSA key pairs for following runs of the server unless they are deleted, then a new keypair will be generated.
+- On start up, the server will generate a new RSA keypair only 4096-bit RSA keys accepted and exponents of 65537 and save it in `/storage`. After this, all instances of the server will use the persistance of the RSA key pairs for following runs of the server unless they are deleted, then a new keypair will be generated.
 - Further, as there was no specific requirements from the SOCP regarding logging, our servers log the `uuidv4s` of clients connecting to the console for ease of use.
 ### Single Server
 

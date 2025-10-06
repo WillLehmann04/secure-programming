@@ -1,6 +1,7 @@
 import json
 from backend.crypto.json_format import stabilise_json
 import hashlib
+import time
 
 # ---------- Peer Communication Utilities ----------
 async def send_to_all_peers(ctx, frame, exclude_ws=None):
@@ -30,3 +31,7 @@ async def send_error(ws, code: str, detail: str = ""):
         await ws.send(json.dumps({"type":"ERROR","payload":{"code":code,"detail":detail}}))
     except Exception:
         pass  # Ignore errors if the websocket is already closed
+
+
+def now_ts() -> str:
+    return int(time.time() * 1000)

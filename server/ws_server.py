@@ -1,3 +1,10 @@
+from pathlib import Path
+
+def get_server_id() -> str:
+    path = Path(__file__).parent.parent / "storage" / "server_id.txt"
+    with path.open("r", encoding="utf-8") as f:
+        return f.read().strip()
+
 from __future__ import annotations
 import asyncio, json, hashlib
 from typing import Dict, Any, Callable, Optional
@@ -26,6 +33,7 @@ from backend.crypto import rsa_verify_pss, stabilise_json, base64url_decode
 
 SESSIONS: Dict[str, WebSocketServerProtocol] = {}   # user_id -> websocket
 WS_TO_USER: Dict[WebSocketServerProtocol, str] = {} # reverse map
+SERVER_SESSIONS: Dict[str, WebSocketServerProtocol] = {}  # server_id -> websocket
 
 def _sha256(b: bytes) -> bytes:
     return hashlib.sha256(b).digest()
@@ -80,6 +88,12 @@ def _is_public_member(user_id: str) -> bool:
         return user_id in set(list_group_members("public"))
     except Exception:
         return False
+
+async def _fanout_public_all_servers(except_user: str, obj: Dict[str, Any]) -> None:
+    await _fanout_public(except_user, obj)  # local users
+    for server_id, ws in SERVER_SESSIONS.items():
+        if ws.open:
+            await ws.send(json.dumps(obj))
 
 # Router for RPC
 from typing import Awaitable
@@ -155,7 +169,7 @@ async def _handle_connection(ws: WebSocketServerProtocol):
 
                 advertise = {
                     "type": "USER_ADVERTISE",
-                    "from": server,
+                    "from": get_server_id(),
                     "to": obj.get("to"),
                     "payload": {
                         "user_id": uid,
@@ -194,16 +208,16 @@ async def _handle_connection(ws: WebSocketServerProtocol):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":"USER_NOT_ONLINE","message":to}}))
                 continue
 
-            if t == "MSG_PUBLIC_CHANNEL":
-                sender = p.get("from","")
+                if t == "MSG_PUBLIC_CHANNEL":
+                    sender = p.get("from","")
                 if not _verify_transport_sig(sender, p, obj.get("transport_sig")) or not _verify_content_sig("MSG_PUBLIC_CHANNEL", p, sender):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":"INVALID_SIG","message":"drop"}}))
                     continue
-                # ensure that sender is a member of "public" channel
                 if not _is_public_member(sender):
                     await ws.send(json.dumps({"type":"ERROR","payload":{"code":"NOT_IN_PUBLIC_GROUP","message":sender}}))
                     continue
-                await _fanout_public(sender, obj)
+                # Broadcast to all servers and local users
+                await _fanout_public_all_servers(sender, obj)
                 continue
 
             # Simple file routing - currently no extra validation
@@ -231,8 +245,28 @@ async def _handle_connection(ws: WebSocketServerProtocol):
         if uid and SESSIONS.get(uid) is ws:
             SESSIONS.pop(uid, None)
 
+
+# --- Add connect_to_servers implementation ---
+import websockets
+
+async def connect_to_servers():
+    from server.bootstrap import get_bootstrap_servers
+    servers = get_bootstrap_servers()
+    for entry in servers:
+        host = entry["host"]
+        port = entry["port"]
+        server_id = f"{host}:{port}"
+        try:
+            ws = await websockets.connect(f"ws://{host}:{port}")
+            SERVER_SESSIONS[server_id] = ws
+            # Optionally: create a task to handle incoming messages from this server
+            print(f"Connected to server {server_id}")
+        except Exception as e:
+            print(f"Failed to connect to server {server_id}: {e}")
+
 async def main():
     init_persistence()
+    await connect_to_servers()
     async with websockets.serve(_handle_connection, "0.0.0.0", 8765, max_size=2**20):
         print("WS server on :8765")
         await asyncio.Future()

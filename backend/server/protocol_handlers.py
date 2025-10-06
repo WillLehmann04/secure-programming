@@ -30,7 +30,7 @@ from backend.server.handlers.user_hello import handle_USER_HELLO
 
 from backend.server.handlers.cmd_list import handle_CMD_LIST
 
-# ---------- User Advertisement ----------
+# ==== User Advertisement ====
 
 async def handle_MSG_PUBLIC_CHANNEL(ctx, ws, frame):
     key = make_seen_key(frame)
@@ -57,7 +57,7 @@ async def handle_FILE_START(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, f
 async def handle_FILE_CHUNK(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
 async def handle_FILE_END(ctx, ws, frame):    await handle_MSG_DIRECT(ctx, ws, frame)
 
-# ---------- registration ----------
+# ==== registration ====
 def register_protocol_handlers(server, ctx):
     server.on("SERVER_WELCOME", lambda env, link: handle_SERVER_WELCOME(ctx, link.ws, env))
     server.on("SERVER_HELLO_JOIN", lambda env, link: handle_SERVER_HELLO_JOIN(ctx, link.ws, env))

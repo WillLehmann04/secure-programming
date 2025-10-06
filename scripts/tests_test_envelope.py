@@ -1,12 +1,10 @@
-# backend/tests_test_envelope.py
-
 from backend.crypto import rsa_key_management as km
 from backend.envelope import sign_payload, make_verifier, is_valid_envelope
 from backend.keydir import keydir
 
 def run():
 
-    # 1) generate a keypair for the sender
+    # generate a keypair for the sender
 
 
     priv_pem, pub_pem = km.generate_rsa_keypair()
@@ -18,7 +16,7 @@ def run():
     sender_id = "11111111-1111-4111-8111-111111111111"
     keydir.add_public_key(sender_id, pub)
 
-    # 2) craft envelope that REQUIRES a signature
+    # ENV that REQUIRES a signature
 
     payload = {"msg": "hello world"}
     env = {
@@ -29,11 +27,11 @@ def run():
         "payload": payload,
     }
 
-    # 3) sign payload with sender private key
+    # sign payload with sender private key
 
     env["sig"] = sign_payload(env["payload"], priv)["sig"]
 
-    # 4) build pubkey lookup + verifier
+    # build pubkey lookup + verifier
 
     def pubkey_lookup(_payload_or_env):
         
@@ -46,7 +44,7 @@ def run():
     verifier = make_verifier(lambda peer_id: keydir.get_public_key(peer_id))
     assert verifier(env), "make_verifier() failed unexpectedly"
 
-    print("Envelope verify OK ✅")
+    print("Envelope verify OK")
 
 if __name__ == "__main__":
     run()

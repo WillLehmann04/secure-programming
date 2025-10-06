@@ -17,7 +17,7 @@ from backend.crypto.json_format import stabilise_json
 import hashlib
 import time
 
-# ---------- Peer Communication Utilities ----------
+# ==== Peer Communication Utilities ====
 async def send_to_all_peers(ctx, frame, exclude_ws=None):
     ''' Send the frame call to all peer servers'''
     for sid, peer_ws in ctx.peers.items():

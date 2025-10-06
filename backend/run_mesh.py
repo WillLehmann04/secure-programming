@@ -11,7 +11,7 @@
           It sets up the server, loads or generates RSA keys, and initialises the context.
 '''
 
-# ========== Imports ==========
+# ==== Imports ====
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +43,7 @@ from backend.server.protocol_handlers import (
     handle_SERVER_WELCOME
 )
 
-# ========== Config ==========
+# ==== Config ====
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("backend.run_mesh")
 
@@ -69,7 +69,7 @@ def load_or_create_keys():
     return privkey, pubkey
 
 
-# ========== Functions ==========
+# ==== Functions ====
 
 def make_context(server_id: str, host: str, port: int, pubkey: str, privkey: str) -> Context:
     # Initialising thse erver and the router

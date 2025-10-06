@@ -43,6 +43,7 @@ from backend.server.protocol_handlers import (
     handle_SERVER_WELCOME
 )
 
+import os, websockets, time
 # ==== Config ====
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("backend.run_mesh")
@@ -78,11 +79,13 @@ def make_context(server_id: str, host: str, port: int, pubkey: str, privkey: str
     async def send_to_peer(sid: str, frame: dict):
         ws = context.peers.get(sid)
         if not ws:
+            print(f"[DEBUG] No peer websocket for server id {sid}")
             return
         try:
+            print(f"[DEBUG] Sending frame to peer {sid}: {frame.get('type')}")
             await ws.send(json.dumps(frame))
-        except Exception:
-            pass # peer likely closed; let reap handle it later
+        except Exception as e:
+            print(f"[DEBUG] Failed to send to peer {sid}: {e}")
 
     async def send_to_local(uid: str, frame: dict):
         ws = context.local_users.get(uid)
@@ -100,6 +103,63 @@ def adapt(context: Context, handler):
     async def _wrapped(env: dict, link: Link):
         await handler(context, link.ws, env)
     return _wrapped
+
+
+async def connect_to_peers(context, server):
+    # Ensure peers_pending exists
+    if not hasattr(context, "peers_pending"):
+        context.peers_pending = {}
+
+    for peer_addr in os.environ.get("SOCP_PEERS", "").split(","):
+        peer_addr = peer_addr.strip()
+        if not peer_addr:
+            continue
+        try:
+            print(f"[DEBUG] Attempting to connect to peer at {peer_addr}")
+            ws = await websockets.connect(peer_addr)
+            peer_id = None  # We'll get this from the SERVER_WELCOME frame
+            context.peers_pending[ws] = peer_addr  # Track pending peer connections
+
+            async def peer_listener():
+                nonlocal peer_id
+                try:
+                    # Send SERVER_HELLO_JOIN
+                    payload = {"host": context.host, "port": context.port}
+                    from_id = context.server_id
+                    sig_b64 = sign_server_frame(context, payload)
+                    join = {
+                        "type": "SERVER_HELLO_JOIN",
+                        "from": from_id,
+                        "to": "*",
+                        "ts": int(time.time() * 1000),
+                        "payload": payload,
+                        "sig": sig_b64,
+                        "alg": "PS256"
+                    }
+                    await ws.send(json.dumps(join))
+                    print(f"[DEBUG] Sent SERVER_HELLO_JOIN to {peer_addr}")
+
+                    # Listen for frames from the peer
+                    async for msg in ws:
+                        env = json.loads(msg)
+                        # When we get SERVER_WELCOME, register the peer
+                        if env.get("type") == "SERVER_WELCOME":
+                            peer_id = env.get("from")
+                            context.peers[peer_id] = ws
+                            print(f"[DEBUG] Registered peer {peer_id} from {peer_addr}")
+                        # Dispatch frame to the server's handler
+                        await server._dispatch(env, Link(ws, role="server", peer_id=peer_id))
+                except Exception as e:
+                    print(f"[DEBUG] Peer connection to {peer_addr} closed: {e}")
+                finally:
+                    if peer_id and peer_id in context.peers:
+                        del context.peers[peer_id]
+                    if ws in context.peers_pending:
+                        del context.peers_pending[ws]
+
+            asyncio.create_task(peer_listener())
+        except Exception as e:
+            print(f"[DEBUG] Failed to connect to peer {peer_addr}: {e}")
 
 async def main():
     host = os.environ.get("SOCP_HOST", "0.0.0.0")
@@ -129,6 +189,8 @@ async def main():
     server.on("FILE_CHUNK",                   adapt(context, handle_FILE_CHUNK))
     server.on("FILE_END",                     adapt(context, handle_FILE_END))
 
+
+    await connect_to_peers(context, server)
     await server.start()
     log.info("Server %s listening at ws://%s:%d", context.server_id, host, port)
 

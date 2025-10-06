@@ -27,6 +27,7 @@ from backend.server.handlers.server_announce import handle_SERVER_ANNOUNCE
 from backend.server.handlers.server_hello_join import handle_SERVER_HELLO_JOIN
 from backend.server.handlers.server_welcome import handle_SERVER_WELCOME
 from backend.server.handlers.user_hello import handle_USER_HELLO    
+import os, websockets
 
 from backend.server.handlers.cmd_list import handle_CMD_LIST
 
@@ -40,6 +41,7 @@ async def handle_MSG_PUBLIC_CHANNEL(ctx, ws, frame):
     # Fan-out to all local users
     for uid, uws in ctx.local_users.items():
         await uws.send(json.dumps(frame))
+
     # Relay to all peers (except the one we got it from)
     await send_to_all_peers(ctx, frame, exclude_ws=ws)
 
@@ -48,6 +50,7 @@ async def handle_PEER_DELIVER(ctx, ws, frame):
     if remember_seen(ctx, key): return
     target = frame.get("payload",{}).get("user_id") or frame.get("to")
     await ctx.router.route_to_user(target, frame.get("payload",{}).get("forwarded", frame))
+
 
 async def handle_HEARTBEAT(ctx, ws, frame):
     sid = frame.get("from")

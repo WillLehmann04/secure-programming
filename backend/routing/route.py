@@ -14,12 +14,11 @@ import json
 import time
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Set
 from collections import deque, defaultdict
-
+import hashlib, json as _json
 from dataclasses import dataclass, field
 
 def _seen_key(frame: dict) -> str:
     # ts|from|to|sha256(canonical(payload))
-    import hashlib, json as _json
     ts = str(frame.get("ts", 0))
     f  = frame.get("from", "")
     t  = frame.get("to", "")

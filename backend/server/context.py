@@ -40,14 +40,3 @@ class Context:
 
         # router will be attached by main.py
         self.router = None
-
-    # ==== tiny send helpers used by Router lambdas ====
-    async def send_to_local(self, uid: str, frame: dict) -> None:
-        ws = self.local_users.get(uid)
-        if ws:
-            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))
-
-    async def send_to_peer(self, sid: str, frame: dict) -> None:
-        ws = self.peers.get(sid)
-        if ws:
-            await ws.send(json.dumps(frame, separators=(",", ":"), ensure_ascii=False))

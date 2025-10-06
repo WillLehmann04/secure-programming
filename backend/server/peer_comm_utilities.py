@@ -19,11 +19,10 @@ import time
 
 # ==== Peer Communication Utilities ====
 async def send_to_all_peers(ctx, frame, exclude_ws=None):
-    ''' Send the frame call to all peer servers'''
     for sid, peer_ws in ctx.peers.items():
-        if exclude_ws is not None and peer_ws is exclude_ws:
-            continue
-        await peer_ws.send(json.dumps(frame))
+        if peer_ws != exclude_ws:
+            print(f"[DEBUG] Sending frame to peer {sid}: {frame.get('type')}")
+            await peer_ws.send(json.dumps(frame))
 
 def make_seen_key(frame: dict) -> str:
     ''' Generate a deduplication key for a frame '''

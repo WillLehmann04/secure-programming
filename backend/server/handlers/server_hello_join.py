@@ -20,7 +20,6 @@ async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
     if peer_id in ctx.peers:
         old_ws = ctx.peers[peer_id]
         if old_ws != ws:
-            # Tie-break: keep connection from lower server_id
             if ctx.server_id < peer_id:
                 await ws.close(code=1000, reason="tie-break: keep outgoing")
                 return
@@ -55,5 +54,6 @@ async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
     for peer_sid, peer_ws in ctx.peers.items():
         try:
             await peer_ws.send(json.dumps(announce))
+            print(f"[DEBUG] Registered peer {peer_id}. Peers now: {list(ctx.peers.keys())}")
         except Exception:
             pass

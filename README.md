@@ -1,11 +1,11 @@
-## Overview--
+## Overview
 Group project created and designed by:
-|   | Name         | Student Id |   |   |
-|---|--------------|------------|---|---|
-| 1 | Will Lehmann | A1889855   |   |   |
-| 2 | Edward Chipperfield         |    Axxxxxxx        |   |   |
-| 3 | Aditeya            |   Axxxxxxx         |   |   |
-| 4 | G A Sadman             |   A1899867        |   |   |
+|   | Name         | Student Id |  
+|---|--------------|------------|
+| 1 | Will Lehmann | A1889855   |  
+| 2 | Edward Chipperfield         |    Axxxxxxx        |  
+| 3 | Aditeya            |   Axxxxxxx         |   
+| 4 | G A Sadman             |   A1899867        |
 
 ## Table of contents
 
@@ -54,8 +54,7 @@ python -m backend.run_mesh
 
 #### Server 2:
 ```console    
-set SOCP_PORT=8766
-python -m backend.run_mesh
+$env:SOCP_PORT="8766"; $env:SOCP_PEERS="ws://localhost:8765"; python -m backend.run_mesh
 ```
 - Secondary server runnning on 0.0.0.0:8766
 

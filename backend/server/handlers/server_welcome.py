@@ -27,3 +27,4 @@ async def handle_SERVER_WELCOME(ctx, ws, frame):
 
     ctx.peers[peer_id] = ws
     print(f"[SERVER_WELCOME] Registered peer {peer_id}. Peers now: {list(ctx.peers.keys())}")
+    

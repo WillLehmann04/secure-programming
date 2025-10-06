@@ -48,6 +48,4 @@ async def cmd_all(ws, user_id, privkey_pem, text):
         "alg": "PS256",
     }
 
-    print(f"[DEBUG] Sending broadcast: {text}")
     await ws.send(json.dumps(env))
-    print(f"[Broadcast Sent] {text}")

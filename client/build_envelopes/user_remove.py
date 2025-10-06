@@ -6,9 +6,11 @@ def build_user_remove(user_id: str, privkey_pem: bytes) -> dict:
         "user_id": user_id,
         "location": "local"
     }
+
     payload_bytes = stabilise_json(payload)
     sig = rsa_sign_pss(privkey_pem, payload_bytes)
     sig_b64 = base64url_encode(sig)
+    
     return {
         "type": "USER_REMOVE",
         "from": user_id,

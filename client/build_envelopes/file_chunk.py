@@ -6,9 +6,10 @@ def build_file_chunk(index: int, chunk_b64u: str, frm: str, to: str | None, ts: 
     ciphertext_bytes = base64url_decode(chunk_b64u)
     d = sha256_bytes(ciphertext_bytes + frm.encode() + (to or "").encode() + str(ts).encode())
     content_sig = base64url_encode(rsa_sign_pss(privkey_pem, d))
+    
     payload = {
         "index": index,
-        "ciphertext": chunk_b64u,  # <-- use "ciphertext" not "chunk"
+        "ciphertext": chunk_b64u,
         "from": frm,
         "to": to,
         "ts": ts,

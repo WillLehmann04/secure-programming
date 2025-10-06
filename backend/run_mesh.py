@@ -73,10 +73,10 @@ def load_or_create_keys():
 
 def make_context(server_id: str, host: str, port: int, pubkey: str, privkey: str) -> Context:
     # Initialising thse erver and the router
-    ctx = Context(server_id=server_id, host=host, port=port, server_public_key_pem=pubkey, server_private_key=privkey)
+    context = Context(server_id=server_id, host=host, port=port, server_public_key_pem=pubkey, server_private_key=privkey)
 
     async def send_to_peer(sid: str, frame: dict):
-        ws = ctx.peers.get(sid)
+        ws = context.peers.get(sid)
         if not ws:
             return
         try:
@@ -85,7 +85,7 @@ def make_context(server_id: str, host: str, port: int, pubkey: str, privkey: str
             pass # peer likely closed; let reap handle it later
 
     async def send_to_local(uid: str, frame: dict):
-        ws = ctx.local_users.get(uid)
+        ws = context.local_users.get(uid)
         if not ws:
             return
         try:
@@ -93,12 +93,12 @@ def make_context(server_id: str, host: str, port: int, pubkey: str, privkey: str
         except Exception:
             pass # client likely disconnected
 
-    ctx.router = Router(server_id=ctx.server_id,send_to_peer=send_to_peer,send_to_local=send_to_local,peers=ctx.peers,user_locations=ctx.user_locations,peer_last_seen=ctx.peer_last_seen,)
-    return ctx
+    context.router = Router(server_id=context.server_id,send_to_peer=send_to_peer,send_to_local=send_to_local,peers=context.peers,user_locations=context.user_locations,peer_last_seen=context.peer_last_seen,)
+    return context
 
-def adapt(ctx: Context, handler):
+def adapt(context: Context, handler):
     async def _wrapped(env: dict, link: Link):
-        await handler(ctx, link.ws, env)
+        await handler(context, link.ws, env)
     return _wrapped
 
 async def main():
@@ -109,33 +109,33 @@ async def main():
     # Build context + router
     privkey, pubkey_pem = load_or_create_keys()
 
-    ctx = make_context(server_id, host, port, pubkey_pem, privkey)
+    context = make_context(server_id, host, port, pubkey_pem, privkey)
     server = TransportServer(host=host, port=port)
 
     # Register handlers via adapter
-    server.on(f"{T_SERVER_HELLO_PREFIX}_JOIN", adapt(ctx, handle_SERVER_HELLO_JOIN))
-    server.on("SERVER_WELCOME",                adapt(ctx, handle_SERVER_WELCOME))
-    server.on("SERVER_ANNOUNCE",               adapt(ctx, handle_SERVER_ANNOUNCE))
-    server.on("USER_ADVERTISE",               adapt(ctx, handle_USER_ADVERTISE))
-    server.on("USER_REMOVE",                  adapt(ctx, handle_USER_REMOVE))
-    server.on("PEER_DELIVER",                 adapt(ctx, handle_PEER_DELIVER))
-    server.on(T_HEARTBEAT,                    adapt(ctx, handle_HEARTBEAT))
+    server.on(f"{T_SERVER_HELLO_PREFIX}_JOIN", adapt(context, handle_SERVER_HELLO_JOIN))
+    server.on("SERVER_WELCOME",                adapt(context, handle_SERVER_WELCOME))
+    server.on("SERVER_ANNOUNCE",               adapt(context, handle_SERVER_ANNOUNCE))
+    server.on("USER_ADVERTISE",               adapt(context, handle_USER_ADVERTISE))
+    server.on("USER_REMOVE",                  adapt(context, handle_USER_REMOVE))
+    server.on("PEER_DELIVER",                 adapt(context, handle_PEER_DELIVER))
+    server.on(T_HEARTBEAT,                    adapt(context, handle_HEARTBEAT))
 
-    server.on("CMD_LIST",                     adapt(ctx, handle_CMD_LIST))
-    server.on(T_USER_HELLO,                   adapt(ctx, handle_USER_HELLO))
-    server.on("MSG_DIRECT",                   adapt(ctx, handle_MSG_DIRECT))
-    server.on("MSG_PUBLIC_CHANNEL",           adapt(ctx, handle_MSG_PUBLIC_CHANNEL))
-    server.on("FILE_START",                   adapt(ctx, handle_FILE_START))
-    server.on("FILE_CHUNK",                   adapt(ctx, handle_FILE_CHUNK))
-    server.on("FILE_END",                     adapt(ctx, handle_FILE_END))
+    server.on("CMD_LIST",                     adapt(context, handle_CMD_LIST))
+    server.on(T_USER_HELLO,                   adapt(context, handle_USER_HELLO))
+    server.on("MSG_DIRECT",                   adapt(context, handle_MSG_DIRECT))
+    server.on("MSG_PUBLIC_CHANNEL",           adapt(context, handle_MSG_PUBLIC_CHANNEL))
+    server.on("FILE_START",                   adapt(context, handle_FILE_START))
+    server.on("FILE_CHUNK",                   adapt(context, handle_FILE_CHUNK))
+    server.on("FILE_END",                     adapt(context, handle_FILE_END))
 
     await server.start()
-    log.info("Server %s listening at ws://%s:%d", ctx.server_id, host, port)
+    log.info("Server %s listening at ws://%s:%d", context.server_id, host, port)
 
     async def heartbeat_loop():
         while True:
-            await ctx.router.broadcast_heartbeat()
-            ctx.router.reap_peers(dead_after=45.0)
+            await context.router.broadcast_heartbeat()
+            context.router.reap_peers(dead_after=45.0)
             await asyncio.sleep(15)
 
     asyncio.create_task(heartbeat_loop())

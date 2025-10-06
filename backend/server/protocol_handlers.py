@@ -22,6 +22,8 @@ from backend.crypto.rsa_key_management import load_public_key
 
 from .peer_comm_utilities import send_to_all_peers, make_seen_key, remember_seen, send_error
 
+from handlers.msg_direct import handle_MSG_DIRECT
+
 # ---------- Server <-> Server ----------
 
 async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
@@ -158,7 +160,6 @@ async def handle_USER_REMOVE(ctx, ws, frame):
         await send_error(ws, "INVALID_SIG", "bad signature")
         return
 
-    #print("HANDLE_USER_REMOVE", frame)
     user_id = frame.get("payload",{}).get("user_id")
     if user_id in ctx.user_locations:
         ctx.user_locations.pop(user_id, None)
@@ -241,37 +242,6 @@ async def handle_SERVER_WELCOME(ctx, ws, frame):
 
     ctx.peers[peer_id] = ws
     print(f"[SERVER_WELCOME] Registered peer {peer_id}. Peers now: {list(ctx.peers.keys())}")
-
-async def handle_MSG_DIRECT(ctx, ws, frame):
-    payload = frame["payload"]
-    sig_b64 = frame.get("sig", "")
-    sender_id = frame.get("from")
-    recipient_id = frame.get("to")
-    ts = str(frame.get("ts"))
-    pubkey_pem = ctx.user_pubkeys.get(sender_id)
-    if not (pubkey_pem and sig_b64):
-        await send_error(ws, "BAD_KEY", "missing sender pubkey or sig")
-        return
-    # Verify envelope signature
-    payload_bytes = stabilise_json(payload)
-    sig = base64url_decode(sig_b64)
-    if not rsa_verify_pss(pubkey_pem, payload_bytes, sig):
-        await send_error(ws, "INVALID_SIG", "bad envelope signature")
-        return
-    # Verify content signature
-    content_sig = payload.get("content_sig", "")
-    ciphertext_b64 = payload.get("ciphertext", "")
-    ciphertext = base64url_decode(ciphertext_b64)
-    d = hashlib.sha256(ciphertext + sender_id.encode() + recipient_id.encode() + str(ts).encode()).digest()
-    content_sig_bytes = base64url_decode(content_sig)
-    if not rsa_verify_pss(pubkey_pem, d, content_sig_bytes):
-        await send_error(ws, "INVALID_SIG", "bad content signature")
-        return
-    # Route to recipient
-    try:
-        await ctx.router.route_to_user(recipient_id, frame)
-    except Exception as e:
-        await send_error(ws, "USER_NOT_FOUND", str(e))
 
 async def handle_FILE_START(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)
 async def handle_FILE_CHUNK(ctx, ws, frame):  await handle_MSG_DIRECT(ctx, ws, frame)

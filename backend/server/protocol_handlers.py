@@ -2,7 +2,7 @@
     Group: Group 2
     Members:
         - William Lehmann (A1889855)
-        - Edward Chipperfield (Axxxxxxxx)
+        - Edward Chipperfield (A1889447)
         
     Description:
         - This module contains protocol handlers for various message types.

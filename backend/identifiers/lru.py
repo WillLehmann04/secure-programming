@@ -1,4 +1,3 @@
-# COMPLIANCE makes it has to be lru *sigh* already doing this in OS...
 '''
     Created: 23/09/2025 @ 6:37pm
     LRU Implementation

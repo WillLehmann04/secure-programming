@@ -10,13 +10,11 @@ from backend.crypto.json_format import stabilise_json
 from backend.crypto import base64url_decode
 from backend.crypto.rsa_key_management import load_public_key
 
-async def send_to_all_peers(ctx, frame):
-    for sid, pws in list(ctx.peers.items()):
-        try:
-            await pws.send(json.dumps(frame))
-            print(f"[send_to_all_peers] Peers: {list(ctx.peers.keys())}")
-        except Exception:
-            ctx.peers.pop(sid, None)
+async def send_to_all_peers(ctx, frame, exclude_ws=None):
+    for sid, peer_ws in ctx.peers.items():
+        if exclude_ws is not None and peer_ws is exclude_ws:
+            continue
+        await peer_ws.send(json.dumps(frame))
     
 
 # ---------- utilities ----------
@@ -44,27 +42,31 @@ async def send_error(ws, code: str, detail: str = ""):
 
 # ---------- Server <-> Server ----------
 async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
-    peer_id = frame.get("from")
-    peer_pubkey_pem = frame["payload"].get("pubkey")
-    if peer_pubkey_pem:
-        ctx.peer_pubkeys[peer_id] = load_public_key(peer_pubkey_pem)
-    peer_pubkey = ctx.peer_pubkeys.get(peer_id)
-    if not peer_pubkey or not verify_server_frame(peer_pubkey, frame["payload"], frame["sig"]):
-        await send_error(ws, "INVALID_SIG", "bad server signature")
-        return
+    peer_id = frame["from"]
+    if peer_id in ctx.peers:
+        old_ws = ctx.peers[peer_id]
+        if old_ws != ws:
+            # Tie-break: keep connection from lower server_id
+            if ctx.server_id < peer_id:
+                await ws.close(code=1000, reason="tie-break: keep outgoing")
+                return
+            else:
+                await old_ws.close(code=1000, reason="tie-break: keep incoming")
+    ctx.peers[peer_id] = ws
 
-    sid = frame.get("from")
-    print(f"[SERVER_HELLO_JOIN] Registered peer {sid}. Peers now: {list(ctx.peers.keys())}")
+    print(f"[SERVER_HELLO_JOIN] Registered peer {peer_id}. Peers now: {list(ctx.peers.keys())}")
     pay = frame.get("payload", {})
-    ctx.peers[sid] = ws
     host, port = pay.get("host"), pay.get("port")
-    if not (sid and host and port):
+    if not (peer_id and host and port):
         return await send_error(ws, "UNKNOWN_TYPE", "bad join payload")
-    ctx.server_addrs[sid] = (host, int(port))
-    ctx.peer_last_seen[sid] = time.time()
+    ctx.server_addrs[peer_id] = (host, int(port))
+    ctx.peer_last_seen[peer_id] = time.time()
 
-    peers_brief = [{"id": k, "host": h, "port": p} for k,(h,p) in ctx.server_addrs.items()]
+    # Send all known USER_ADVERTISEs to the new peer
+    for user_id, env in ctx.user_advertise_envelopes.items():
+        await ws.send(json.dumps(env))
 
+    # Announce yourself to all peers (including the new one)
     payload = {"host": ctx.host, "port": ctx.port}
     sig_b64 = sign_server_frame(ctx, payload)
     announce = {
@@ -74,19 +76,6 @@ async def handle_SERVER_HELLO_JOIN(ctx, ws, frame):
         "ts": int(time.time() * 1000),
         "payload": payload,
         "sig": sig_b64,
-        "alg": "PS256"
-    }
-    for user_id, env in ctx.user_advertise_envelopes.items():
-        await ws.send(json.dumps(env))
-
-    # Announce yourself to all peers (including the new one)
-    announce = {
-        "type": "SERVER_ANNOUNCE",
-        "from": ctx.server_id,
-        "to": "*",
-        "ts": int(time.time() * 1000),
-        "payload": {"host": ctx.host, "port": ctx.port},
-        "sig": "",
         "alg": "PS256"
     }
     for peer_sid, peer_ws in ctx.peers.items():
@@ -152,14 +141,13 @@ async def handle_USER_ADVERTISE(ctx, ws, frame):
 async def handle_MSG_PUBLIC_CHANNEL(ctx, ws, frame):
     key = make_seen_key(frame)
     if remember_seen(ctx, key):
-        return  # Already seen, drop it
+        return  # Drop duplicate
 
-    # Fan-out to all local users except sender
+    # Fan-out to all local users
     for uid, uws in ctx.local_users.items():
-        if uws is not ws:
-            await uws.send(json.dumps(frame))
-    # Fan-out to all peers
-    await send_to_all_peers(ctx, frame)
+        await uws.send(json.dumps(frame))
+    # Relay to all peers (except the one we got it from)
+    await send_to_all_peers(ctx, frame, exclude_ws=ws)
 
 
 async def handle_USER_REMOVE(ctx, ws, frame):

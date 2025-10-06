@@ -10,6 +10,7 @@ from typing import Tuple, List
 import websockets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # for public-channel symmetric
 
+
 from backend.crypto import (
     rsa_sign_pss,
     base64url_encode,
@@ -179,27 +180,6 @@ def build_msg_direct(ciphertext, sender_user_id, recipient_user_id, ts, content_
         "alg": "PS256",
     }
 
-async def cmd_channel(ws, user_id: str, privkey_pem: bytes, channel_id: str, text: str):#was made before we got rid of the channel option
-    ts = now_ts()
-    payload = {
-        "ciphertext": text,  # plaintext for public channels
-        "from": user_id,
-        "to": channel_id,
-        "ts": ts,
-    }
-    payload_bytes = stabilise_json(payload)
-    sig = rsa_sign_pss(privkey_pem, payload_bytes)
-    sig_b64 = base64url_encode(sig)
-    env = {
-        "type": "MSG_PUBLIC_CHANNEL",
-        "from": user_id,
-        "to": channel_id,
-        "ts": ts,
-        "payload": payload,
-        "sig": sig_b64,
-        "alg": "PS256",
-    }
-    await ws.send(json.dumps(env))
 
 ''' TODO: FIX THSESE  '''
 def build_msg_public(nonce_b64u: str, ct_b64u: str, frm: str, ts: int, content_sig_b64u: str, privkey_pem: bytes, channel_id: str) -> dict:
@@ -261,10 +241,10 @@ async def listener(ws, privkey_pem, tables):
 
         if obj.get("type") == "MSG_PUBLIC_CHANNEL":
             payload = obj.get("payload", {})
-            sender = payload.get("from")
-            channel = payload.get("to")
-            ts = payload.get("ts")
-            text = payload.get("ciphertext")
+            sender = obj.get("from")
+            channel = obj.get("to")
+            ts = obj.get("ts")
+            text = payload.get("text", "")
             print(f"[#{channel}] {sender} @ {ts}: {text}")
             continue
 
@@ -379,8 +359,6 @@ async def cmd_tell(ws, user_id: str, privkey_pem: bytes, to: str, text: str, tab
         print("ERROR in cmd_tell:", e)
         traceback.print_exc()
 
-async def cmd_all(ws, user_id: str, privkey_pem: bytes, text: str):
-    await cmd_channel(ws, user_id, privkey_pem, "all", text)
 
 async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_bytes, maybe_bytes=None):
     if maybe_bytes is None:
@@ -419,6 +397,25 @@ async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_by
     end_env["transport_sig"] = signed_transport_sig(end_env["payload"], privkey_pem)
     await ws.send(json.dumps(end_env))
     print("file transfer finished (sent)")
+
+
+async def cmd_all(ws, user_id: str, privkey_pem: bytes, text: str):
+    ts = now_ts()
+    payload = {
+        "text": text,
+        "sender_pub": "",  # Optionally include your pubkey_pem here if required by your protocol
+        "content_sig": ""  # Optionally sign (see below)
+    }
+
+    env = {
+        "type": "MSG_PUBLIC_CHANNEL",
+        "from": user_id,
+        "to": "all",  # or "g123" or "*" depending on your convention
+        "ts": ts,
+        "payload": payload,
+        "sig": "",  # Not required for plaintext public channel
+    }
+    await ws.send(json.dumps(env))
 
 # MAIN LOOP
 async def main_loop(cfg_path: str):

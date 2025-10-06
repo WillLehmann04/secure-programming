@@ -3,10 +3,12 @@ import json
 from collections import deque
 
 class Context:
-    def __init__(self, server_id: str, host: str, port: int):
+    def __init__(self, server_id: str, host: str, port: int, server_public_key_pem: bytes = None, server_private_key = None):
         self.server_id = server_id
         self.host = host
         self.port = port
+        self.server_public_key_pem = server_public_key_pem
+        self.server_private_key = server_private_key
 
         # server mesh
         self.peers = {}            # sid -> ws

@@ -1,5 +1,6 @@
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey, RSAPrivateKey
 
 def generate_rsa_keypair(bits: int = 4096) -> tuple[bytes, bytes]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=bits)
@@ -14,12 +15,16 @@ def generate_rsa_keypair(bits: int = 4096) -> tuple[bytes, bytes]:
     )
     return private_pem, public_pem
 
-def load_public_key(public_pem: bytes | str):
-    if isinstance(public_pem, str):
-        public_pem = public_pem.encode("utf-8")
-    return serialization.load_pem_public_key(public_pem)
+def load_public_key(public_pem_or_obj):
+    if isinstance(public_pem_or_obj, RSAPublicKey):
+        return public_pem_or_obj
+    if isinstance(public_pem_or_obj, str):
+        public_pem_or_obj = public_pem_or_obj.encode("utf-8")
+    return serialization.load_pem_public_key(public_pem_or_obj)
 
-def load_private_key(private_pem: bytes | str):
-    if isinstance(private_pem, str):
-        private_pem = private_pem.encode("utf-8")
-    return serialization.load_pem_private_key(private_pem, password=None)
+def load_private_key(private_pem_or_obj):
+    if isinstance(private_pem_or_obj, RSAPrivateKey):
+        return private_pem_or_obj
+    if isinstance(private_pem_or_obj, str):
+        private_pem_or_obj = private_pem_or_obj.encode("utf-8")
+    return serialization.load_pem_private_key(private_pem_or_obj, password=None)

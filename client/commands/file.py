@@ -1,4 +1,4 @@
-from client.helpers.small_utils import now_ts, b64u, base64url_encode, stabilise_json, chunk_plaintext, signed_transport_sig, content_sig_dm, rsa_sign_pss, sha256_bytes, aesgcm_encrypt
+from client.helpers.small_utils import now_ts, b64u, stabilise_json, chunk_plaintext
 from backend.crypto import rsa_sign_pss, oaep_encrypt, oaep_encrypt_large
 
 from client.build_envelopes.file_start import build_file_start
@@ -20,48 +20,59 @@ async def cmd_file(ws, user_id: str, privkey_pem: bytes, target: str, path_or_by
 
     total_len = len(data)
     sha256_hex = hashlib.sha256(data).hexdigest()
-    ts = now_ts()
-
-    # Prepare and send FILE_START
-    start_env = build_file_start(
-        {"filename": filename, "size": total_len, "chunks": None, "sha256": sha256_hex},
-        user_id, (None if target == "public" else target), ts, privkey_pem, pubkey_pem
-    )
-    await ws.send(json.dumps(start_env))
+    ts_start = now_ts()
 
     if target == "public":
-        print("public")
+        RAW_CHUNK_BYTES = 32 * 1024
+        raw_chunks = list(chunk_plaintext(data, RAW_CHUNK_BYTES))  # -> [bytes]
+        chunks_b64 = [b64u(ch) for ch in raw_chunks]
     else:
+        if tables is None or getattr(tables, "user_pubkeys", None) is None:
+            print("Recipient key table not available (tables.user_pubkeys missing).")
+            return
         recipient_pub = tables.user_pubkeys.get(target)
         if not recipient_pub:
             print(f"Recipient public key for {target} not found.")
             return
-        encrypted_chunks = oaep_encrypt_large(recipient_pub, data)
-        chunks = encrypted_chunks
-        num_chunks = len(chunks)
+        enc_chunks = oaep_encrypt_large(recipient_pub, data)
+        chunks_b64 = [b64u(ch) for ch in enc_chunks]
 
-    # Update chunk count in FILE_START (optional, for accuracy)
-    start_env["payload"]["manifest"]["chunks"] = num_chunks
+    num_chunks = len(chunks_b64) if chunks_b64 else 0
 
-    # Send FILE_CHUNKs
-    for i, ch in enumerate(chunks):
-        if target == "public":
-            nonce, ct = aesgcm_encrypt(gk, ch, aad=f"{user_id}|{ts}|{i}".encode())
-            payload_chunk = json.dumps({"nonce": b64u(nonce), 
-            "ciphertext": b64u(ct)})
-            chunk_b64 = b64u(payload_chunk.encode("utf-8"))
-        else:
-            chunk_b64 = b64u(ch)
+    start_env = build_file_start(
+        {
+            "filename": filename,
+            "size": total_len,
+            "chunks": num_chunks,
+            "sha256": sha256_hex
+        },
+        user_id,
+        (None if target == "public" else target),
+        ts_start,
+        privkey_pem,
+        pubkey_pem
+    )
+    await ws.send(json.dumps(stabilise_json(start_env)))
 
+    for i, ch_b64 in enumerate(chunks_b64):
         chunk_env = build_file_chunk(
-            i, chunk_b64, user_id, (None if target == "public" else target), now_ts(), privkey_pem, pubkey_pem
+            i,
+            ch_b64,
+            user_id,
+            (None if target == "public" else target),
+            now_ts(),
+            privkey_pem,
+            pubkey_pem
         )
-        await ws.send(json.dumps(chunk_env))
+        await ws.send(json.dumps(stabilise_json(chunk_env)))
 
-    # Send FILE_END
     end_env = build_file_end(
         {"chunks": num_chunks, "sha256": sha256_hex},
-        user_id, (None if target == "public" else target), now_ts(), privkey_pem, pubkey_pem
+        user_id,
+        (None if target == "public" else target),
+        now_ts(),
+        privkey_pem,
+        pubkey_pem
     )
-    await ws.send(json.dumps(end_env))
-    print("file transfer finished (sent)")
+    await ws.send(json.dumps(stabilise_json(end_env)))
+    print(f"file transfer finished (sent): {filename} ({total_len} bytes, {num_chunks} chunks)")
